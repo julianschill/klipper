@@ -440,8 +440,9 @@ class ledEffect:
         def __init__(self,  **kwargs):
             super(ledEffect.layerTwinkle, self).__init__(**kwargs)
 
+            self.thisFrame = colorArray([0.0, 0.0, 0.0] * self.ledCount)
             self.lastBrightness  = [-1] * self.ledCount
-            self.decayTable = self._decayTable(factor=4)
+            self.decayTable = self._decayTable(factor=1 / self.effectCutoff)
             self.decayLen = len(self.decayTable)
             self.colorCount = len(self.paletteColors) - 1
 
@@ -490,7 +491,9 @@ class ledEffect:
         def __init__(self,  **kwargs):
             super(ledEffect.layerComet, self).__init__(**kwargs)
 
-            decayTable = self._decayTable(factor=len(self.paletteColors)*3,
+            if self.effectCutoff <= 0: self.effectCutoff = .1
+
+            decayTable = self._decayTable(factor=len(self.paletteColors)*self.effectCutoff,
                                           rate=1)
 
             gradient   = self.paletteColors[0] + self._gradient(self.paletteColors[1:],
@@ -518,7 +521,7 @@ class ledEffect:
         def __init__(self,  **kwargs):
             super(ledEffect.layerChase, self).__init__(**kwargs)
 
-            decayTable = self._decayTable(factor=len(self.paletteColors)*3,
+            decayTable = self._decayTable(factor=len(self.paletteColors)*self.effectCutoff,
                                           rate=1)
 
             gradient   = self.paletteColors[0] + self._gradient(self.paletteColors[1:],
@@ -601,7 +604,7 @@ class ledEffect:
             super(ledEffect.layerAnalogPin, self).__init__(**kwargs)
 
             if len(self.paletteColors) == 1: 
-                self.paletteColors += self.paletteColors
+                self.paletteColors = [0.0,0.0,0.0] + self.paletteColors
 
             self.decayTable = self._decayTable(factor=8)
             self.gradient   = colorArray(self._gradient(self.paletteColors, 100))
