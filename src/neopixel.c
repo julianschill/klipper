@@ -179,4 +179,4 @@ command_neopixel_send(uint32_t *args)
             break;
     }
 }
-DECL_COMMAND(command_neopixel_send, "neopixel_send oid=%c data=%*s");
+DECL_COMMAND_FLAGS(command_neopixel_send, HF_IN_SHUTDOWN, "neopixel_send oid=%c data=%*s");
