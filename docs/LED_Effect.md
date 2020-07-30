@@ -1,7 +1,9 @@
 Addressable LEDs are beginning to supercede RGB LEDs for their
 flexibility and relative ease of use. With each individual element
-capable of displaying an entire spectrum of colors as very high speed, 
+capable of displaying an entire spectrum of colors at very high speed, 
 they can be used to create a variety of lighting effects.
+
+<!-- DEMO GIF GOES HERE -->
 
 At this time, klipper supports most WS2812 compatible (neopixels)
 and APA102 compatible (dotstar) chips for LED Effects. 
@@ -56,7 +58,9 @@ chain_count:             16
 
 Effects are, in a more abstract sense, a _state_ that the strips 
 exist in. Effects can be comprised of 1 led or 100. There can be
-one effect layer or 10. It is all arbitrary.
+one effect layer or 10. It is all arbitrary and extensible. This
+means the only limit to how many layers and leds can be run 
+concurrently is how much 
 
 ## Basic definition
 
@@ -98,6 +102,14 @@ effects:
 This has defined an effect called `panel_idle` that can be controlled
 via the gcode command `SET_LED_EFFECT EFFECT=panel_idle`
 
+### Additional effect level parameters
+autostart
+frame_rate
+run_on_error
+heater
+analog_pin
+stepper
+
 ## Defining LEDs 
 
 the `leds:` section is a list of neopixel or dotstar strips that will
@@ -128,7 +140,6 @@ leds:
     dotstar:bed_lights   (1,3,5)
 ``` 
 
-
 ## Defining Effect Layers
 Effects are generated as frames. Each frame contains the number of pixels
 equal to the number of LEDs defined for the effect. So an effect with 22
@@ -141,14 +152,17 @@ Each effect layer is listed on its own line and each has its own settings.
 
 Most effect layers such as breathing and gradient are pre-rendered when 
 Klipper starts in order to save on computing them later. Others such as
-Fire and Twinkle are rendered on the fly. 
+Fire and Twinkle are rendered on demand. 
 
-Each layer is defined with the following parameters on a single line.
+Each layer is defined with the following parameters
  * Layer name
  * Effect Rate
  * Cutoff
  * Blending mode
  * Color palette
+
+Each layer must be on a single line and each line must be indented.
+Color palettes 
 
 ```
 layers:            
@@ -157,7 +171,7 @@ layers:
 ```
 There are several effects to choose from.
 
-### Static
+#### Static
     Effect Rate:  Not used but must be provided
     Cutoff:       Not used but must be provided
     Palette:      Colors are blended evenly across the strip
@@ -165,7 +179,7 @@ A single color is displayed and it does not change. If a palette of multiple
 colors is provided, colors will be evenly blended along the LEDs based on
 difference in hue.
 
-### Breathing
+#### Breathing
     Effect Rate:  3   Duration of a complete cylce
     Cutoff:       0   Not used but must be provided
     Palette:          Colors are cycled in order
@@ -174,7 +188,7 @@ Colors fade in and out. If a palette of multiple colors is provided, it will
 cycle through those colors in the order they are specified in the palette.
 The effect speed parameter controls how long it takes to "breathe" one time.
 
-### Blink
+#### Blink
     Effect Rate:  1   Duration of a complete cylce
     Cutoff:       0   Not used but must be provided
     Palette:          Colors are cycled in order
@@ -182,7 +196,7 @@ The effect speed parameter controls how long it takes to "breathe" one time.
 LEDs are turned fully on and fully off based on the effect speed. If a palette 
 of multiple colors is provided, it will cycle through those colors in order. 
 
-### Strobe
+#### Strobe
     Effect Rate:  1   Number of times per second to strobe
     Cutoff:       1.5 Determines decay rate. A higher number yields quicker decay
     Palette:          Colors are cycled in order
@@ -192,14 +206,14 @@ of multiple colors is provided, it will cycle through those colors in order. The
 effect rate controls how many times per second the lights will strobe. The cutoff
 parameter controls the decay rate. A good decay rate is 1.5.
 
-### Twinkle
+#### Twinkle
     Effect Rate:  1   Increases the probability that an LED will illuminate.
     Cutoff:       .25 Determines decay rate. A higher number yields quicker decay
     Palette:          Random color chosen
 Random flashes of light with decay along a strip. If a palette is specified,
 a random color is chosen from the palette.
 
-### Gradient
+#### Gradient
     Effect Rate:  1   How fast to cycle through the gradient
     Cutoff:       0   Not used but must be provided
     Palette:          Linear gradient with even spacing.
@@ -207,7 +221,7 @@ Colors from the palette are blended into a linear gradient across the length
 of the strip. The effect rate parameter controls the speed at which the colors
 are cycled through.
 
-### Comet 
+#### Comet 
     Effect Rate:  1   How fast the comet moves, negative values change direction
     Cutoff:       1   Length of tail (somewhat arbitrary)
     Palette:          Color of "head" and gradient of "tail"
@@ -216,13 +230,13 @@ by using a negative speed value. The palette colors determine the color of the
 comet and the tail. The first color of the palette defines the color of the
 "head" of the comet and the remaining colors are blended into the "tail"
 
-### Chase
+#### Chase
     Effect Rate:  1   How fast the comet moves, negative values change direction
     Cutoff:       1   Length of tail (somewhat arbitrary)
     Palette:          Color of "head" and gradient of "tail"
 Identical settings as comet, but with multiple lights chasing each other.
 
-### Heater
+#### Heater
     Effect Rate:  1   Minimum temperature to activate effect
     Cutoff:       0   Not used but must be provided
     Palette:          Color values to blend from Cold to Hot
@@ -234,7 +248,7 @@ of the gradient is used. If the heater is turned off, the colors will follow thi
 pattern in reverse until the temperature falls below the minimum temperature
 specified in the config.
 
-### AnalogPin
+#### AnalogPin
     Effect Rate:  10  Multiplier for input signal
     Cutoff:       40  Minimum threshold to trigger effect
     Palette:          Color values to blend
@@ -243,89 +257,112 @@ If multiple colors are specified in the palette, it chooses one based on the
 value of the pin. If only one color is specified, the brightness is proportional
 to the pin value. An example usage would be attaching an analog potentiometer
 that controls the brightness of an LED strip. Internally, input voltage is measured
-as a percentage of voltage vs vref.  
+as a percentage of voltage vs aref.  
 
-## Blending Effect Layers
+#### Stepper
+    Effect Rate:  4   Number of trailing LEDs
+    Cutoff:       4   Number of leading LEDs
+    Palette:          Color values to blend
+The position of the specified stepper motor is represented by the first color
+in the palette. The remaining colors in the gradient are blended and mirrored
+on either side. As the stepper position changes relative to the axis length,
+the lights move up and down the strip.
+
+#### Fire
+    Effect Rate:  45  Probability of "sparking"
+    Cutoff:       40  Rate of "cooling"
+    Palette:          Color values to blend from "Cold" to "Hot"
+The FastLED library for Arduino has a sample sketch called Fire2012WithPalette
+included. This effect is a port of that sketch. It simulates a flame by "sparking"
+an LED. The "heat" from that LED travels down the lenght of the LEDs where it 
+gradually cools.
+
+
+
+## Effect Layer Blending
 If you have ever used image editing software you may be familiar with
 color blending between image layers. Several common color blending
-techniques have been added to blend layers together. Layers defined
-in the configuration are ordered top to bottom. If there are 3 layers
-defined, the topmost layer is first blended with the middle layer, then
-the result is blended with the bottom layer. The bottom layer will never
-be blended with anything even if a blending mode is specified for it.
+techniques have been added to blend LEDS layers together. Layers defined
+in the configuration are ordered top to bottom. 
 
-### bottom
+If there are 3 layers defined, the bottom layer is first blended with the
+middle layer. The resultant layer is then blended with the top. The bottom 
+layer will never be blended with anything even if a blending mode is specified.
+
+Layer blending is always evaluated from the bottom up.
+
+Since values cannot exceed 100% brightness and 0% darkness, they are clamped 
+to this range. 
+
+#### bottom
 No blending is done, the value from the color channel of the bottom layer is used.
 
-### top
+#### top
 No blending is done, the value from the color channel of the top layer is used.
 
-### add 
+#### add 
 ```
-    ( a + b )
+    ( t + b )
 ```
 Color channels (Red, Green, and Blue) are added to one another. This results
 in channels becoming brighter.
 
-### subtract 
+#### subtract 
 ```
-    ( a - b ) 
+    ( t - b ) 
 ```
 The the bottom layer is subtracted from the top layer. This results in darkening
 similar colors.
 
-### difference
+#### difference
 ```
-    ( a - b ) or ( b - a )
+    ( t - b ) or ( b - t )
 ```
 The darker of the layers is subtracted from the brighter of the two
 
-### average
+#### average
 ```
-    ( a + b) / 2
+    ( t + b ) / 2
 ```
 The average of the channels is taken
 
-### multiply
+#### multiply
 ```
-    ( a * b )
+    ( t * b )
 ```
 The channels are multiplied together, this is useful to darken colors
 
-### divide
+#### divide
 ```
-    ( a / b )
+    ( t / b )
 ```
 The channels are divided, this results in brightening colors, often to white
 
-### screen
+#### screen
 ```
-    1 - ( 1 - a ) * ( 1 - b)
+    1 - ( 1 - t ) * ( 1 - b )
 ```
 The values are inverted, multiplied, and then inverted again. Similar to
 divide, it results in brighter colors
 
-### lighten
+#### lighten
 ```
-    ( a if a > b else b )
+    ( t if t > b else b )
 ```
 The brigther of the color channels is used
 
-### darken
+#### darken
 ```
-    ( a if a < b else b )
+    ( t if t < b else b )
 ```
 The opposite of lighten, the darker of color channels is used 
 
-### overlay
+#### overlay
 ```
-    ( 2ab if a > .5 else 1-2(1-a)(1-b) )
+    ( 2ab if a > .5 else 1 - 2( 1 - a )( 1 - b ) )
 ```
-    Overlay is a combination of multiply and screen. This has a similar effect
-    of increasing contrast.
-
-
-
+Overlay is a combination of multiply and screen. This has a similar effect
+of increasing contrast.
 
 # Sample Configurations
 
@@ -349,6 +386,7 @@ layers:
 ```
 
 ## Bed Idle with Temperature
+```
 [led_effect bed_effects]
 leds:                               
     neopixel:bed_lights
@@ -358,4 +396,29 @@ heater:                             heater:bed
 layers:
     heating 50 0 add    (1,1,0),(1,0,0)
     static  0  0 bottom (1,0,0)
+```
 
+## Brightness Controlled By Potentiometer
+This is an example of how to combine the Analog Pin effect with
+layer blending so it controls the brightness of the lights. One
+could connect a potentiometer to a thermistor port and use the
+voltage reading from that pin to determine the amount of color
+to subtract from the base layers. The potentiometer would need
+to be wired so that when it is turned "down" the voltage on the
+analog pin is on full output and when  it is turned up it is on
+minimum output. This way, when the potentiometer is "down", the
+color (1.0, 1.0, 1.0) (Full white) is being subtracted from the
+colors of the layer, resulting in (0.0, 0.0, 0.0) (Full Black).
+The effect rate and cutoff would need to be tuned to the specific 
+potentiometer and board combination.
+```
+[led_effect bed_effects]
+leds:                               
+    neopixel:tool_lights
+autostart:                          true
+frame_rate:                         24
+analog_pin:                         ar52
+layers:
+    analogpin 10 0 subtract    (1,1,1)
+    static    0  0 bottom      (1,1,1)
+```
