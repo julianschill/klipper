@@ -6,9 +6,6 @@
 
 BACKGROUND_PRIORITY_CLOCK = 0x7fffffff00000000
 
-BIT_MAX_TIME=.000004
-RESET_MIN_TIME=.000050
-
 class PrinterNeoPixel:
     def __init__(self, config):
         self.printer = config.get_printer()
@@ -27,15 +24,26 @@ class PrinterNeoPixel:
         red = config.getfloat('initial_RED', 0., minval=0., maxval=1.)
         green = config.getfloat('initial_GREEN', 0., minval=0., maxval=1.)
         blue = config.getfloat('initial_BLUE', 0., minval=0., maxval=1.)
+
+        self.bitMaxTime = config.getfloat('bit_max_time', 
+                                           minval   =2.0,
+                                           maxval   =8.0,
+                                           default  =4.0) / 1000000.0
+
+        self.resetMinTime = config.getfloat('reset_min_time', 
+                                           minval   =30.0,
+                                           maxval   =100.0,
+                                           default  =60.0) / 1000000.0
+
         self.update_color_data(red, green, blue)
-        self.printer.register_event_handler("klippy:connect", self.send_data)
+        self.printer.register_event_handler("klippy:Sconnect", self.send_data)
         # Register commands
         gcode = self.printer.lookup_object('gcode')
         gcode.register_mux_command("SET_LED", "LED", name, self.cmd_SET_LED,
                                    desc=self.cmd_SET_LED_help)
     def build_config(self):
-        bmt = self.mcu.seconds_to_clock(BIT_MAX_TIME)
-        rmt = self.mcu.seconds_to_clock(RESET_MIN_TIME)
+        bmt = self.mcu.seconds_to_clock(self.bitMaxTime)
+        rmt = self.mcu.seconds_to_clock(self.resetMinTime)
         self.mcu.add_config_cmd("config_neopixel oid=%d pin=%s"
                                 " bit_max_ticks=%d reset_min_ticks=%d"
                                 % (self.oid, self.pin, bmt, rmt))
@@ -70,8 +78,9 @@ class PrinterNeoPixel:
         # Send command
         if not transmit:
             return
-        print_time = self.printer.lookup_object('toolhead').get_last_move_time()
-        self.send_data(self.mcu.print_time_to_clock(print_time))
-
+        #print_time = self.printer.lookup_object('toolhead').get_last_move_time()
+        #self.send_data(self.mcu.print_time_to_clock(print_time))
+        self.send_data()
+        
 def load_config_prefix(config):
     return PrinterNeoPixel(config)
