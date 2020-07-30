@@ -162,8 +162,19 @@ Each layer is defined with the following parameters
  * Color palette
 
 Each layer must be on a single line and each line must be indented.
-Color palettes 
+Color palettes can be of unlimited length but may be compressed depending
+on the size of the frame or number of LEDs on a strip. Colors are defined
+as groups of Red, Green, and Blue. The range for each color is a decimal
+number from 0.0 to 1.0. So for yellow, you would use ( 1.0, 1.0, 0.0 ).
 
+Individual colors should be wrapped in parenthesis and separated by commas.
+
+Some Sample Palettes:
+
+    Rainbow    (1.0, 0.0, 0.0),(0.0, 1.0, 0.0),(0.0, 0.0, 1.0)
+    Fire       (0.0, 0.0, 0.0),(1.0, 0.0, 0.0),(1.0, 1.0, 0.0),(1.0, 1.0, 1.0)
+    Blue Comet (0.8, 1.0, 1.0),(0.0, 0.8, 1.0),(0.0, 0.0, 1.0)
+    
 ```
 layers:            
    breathing  .5 screen (0,.1,1), (0,1,.5), (0, 1,1), (0,.1,.5)
@@ -219,22 +230,23 @@ a random color is chosen from the palette.
     Palette:          Linear gradient with even spacing.
 Colors from the palette are blended into a linear gradient across the length
 of the strip. The effect rate parameter controls the speed at which the colors
-are cycled through.
+are cycled through. A negative value for the effect rate changes the direction
+the gradient cycles (right to left vs left to right)
 
 #### Comet 
     Effect Rate:  1   How fast the comet moves, negative values change direction
     Cutoff:       1   Length of tail (somewhat arbitrary)
     Palette:          Color of "head" and gradient of "tail"
 A light moves through the LEDs with a decay trail. Direction can be controlled
-by using a negative speed value. The palette colors determine the color of the
-comet and the tail. The first color of the palette defines the color of the
-"head" of the comet and the remaining colors are blended into the "tail"
+by using a negative effect rate value. The palette colors determine the color 
+of the comet and the tail. The first color of the palette defines the color of 
+the "head" of the comet and the remaining colors are blended into the "tail"
 
 #### Chase
     Effect Rate:  1   How fast the comet moves, negative values change direction
     Cutoff:       1   Length of tail (somewhat arbitrary)
     Palette:          Color of "head" and gradient of "tail"
-Identical settings as comet, but with multiple lights chasing each other.
+Identical settings as Comet, but with multiple lights chasing each other.
 
 #### Heater
     Effect Rate:  1   Minimum temperature to activate effect
@@ -242,11 +254,13 @@ Identical settings as comet, but with multiple lights chasing each other.
     Palette:          Color values to blend from Cold to Hot
 This effect becomes active when the specified heater is active or the temperature
 is greater than the minimum specified temperature. For instance, if a heater is
-turned on and set to a target temperature, the LEDs will cycle throug the gradient
-colors until the target temperature is met. Once  it has been met, the last color
-of the gradient is used. If the heater is turned off, the colors will follow this
+turned on and set to a target temperature, the LEDs will cycle through the gradient
+colors until the target temperature is met. Once it has been met, the last color
+of the gradient is used and the effect is essentially a static color until the.
+Heater state changes. If the heater is turned off, the colors will follow this
 pattern in reverse until the temperature falls below the minimum temperature
-specified in the config.
+specified in the config. This can be used to indicate the hotend or bed is in
+a safe state to touch.
 
 #### AnalogPin
     Effect Rate:  10  Multiplier for input signal
@@ -257,7 +271,9 @@ If multiple colors are specified in the palette, it chooses one based on the
 value of the pin. If only one color is specified, the brightness is proportional
 to the pin value. An example usage would be attaching an analog potentiometer
 that controls the brightness of an LED strip. Internally, input voltage is measured
-as a percentage of voltage vs aref.  
+as a percentage of voltage vs aref. Another use could be to attach the RPM wire
+from a fan if the fan has a tachometer. It must be used with care as too much
+current or too high a voltage can damage a pin or destroy a controller board.
 
 #### Stepper
     Effect Rate:  4   Number of trailing LEDs
@@ -266,17 +282,20 @@ as a percentage of voltage vs aref.
 The position of the specified stepper motor is represented by the first color
 in the palette. The remaining colors in the gradient are blended and mirrored
 on either side. As the stepper position changes relative to the axis length,
-the lights move up and down the strip.
+the lights move up and down the strip. It should be noted that the effect
+itself updates stepper position every half second based on the reported position
+of the stepper similar to the GET_POSITION gcode command. It will not be realtime.
 
 #### Fire
     Effect Rate:  45  Probability of "sparking"
     Cutoff:       40  Rate of "cooling"
     Palette:          Color values to blend from "Cold" to "Hot"
 The FastLED library for Arduino has a sample sketch called Fire2012WithPalette
-included. This effect is a port of that sketch. It simulates a flame by "sparking"
-an LED. The "heat" from that LED travels down the lenght of the LEDs where it 
-gradually cools.
-
+included with it. This effect is a port of that sketch. It simulates a flame by 
+"sparking" an LED. The "heat" from that LED travels down the length of the LEDs 
+where it gradually cools. A higher rate of sparking causes a greater amount
+of heat to accumulate at the base of the strip resulting a more intense flame.
+Changing the rate of cooling results in longer or shorter overall flames.
 
 
 ## Effect Layer Blending
@@ -292,7 +311,7 @@ layer will never be blended with anything even if a blending mode is specified.
 Layer blending is always evaluated from the bottom up.
 
 Since values cannot exceed 100% brightness and 0% darkness, they are clamped 
-to this range. 
+to this range as a floating point number ( 0.0 - 1.0 )
 
 #### bottom
 No blending is done, the value from the color channel of the bottom layer is used.
@@ -367,7 +386,7 @@ of increasing contrast.
 # Sample Configurations
 
 ## das Blinkenlights
-in the event of critical error, all LED strips breath red in unision to
+In the event of critical error, all LED strips breath red in unision to
 provide a visible indicator of an error condition with the printer. This
 effect is disabled during normal operation and only starts when the MCU
 enters a shutdown state.
