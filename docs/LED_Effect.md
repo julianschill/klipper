@@ -8,7 +8,7 @@ and APA102 compatible (dotstar) chips for LED Effects.
 
 # Wiring WS2812 compatible (neopixel) LEDs
 
-Neopixel type LEDs require one digital IO pin and a voltage supply. 
+Neopixel type LEDs require one digital IO pin and a supply of power. 
 Most are 5V but can be driven from a 3V source. Check manufacturer 
 specifications to ensure they will work with your board. Each individual
 emitter has 4 pins. VCC, GND, Din, and Dout. Neopixel strips typically
@@ -89,11 +89,10 @@ printer comes online and we want the brightness to _breathe_ in and out.
 [led_effect panel_idle]
 autostart:              true
 frame_rate:             24
-blend_mod:              add
 leds:                               
     neopixel:panel_ring                       
 effects:
-    breathing  .5 1 [(.5,.5,1)]
+    breathing  .5 1 top [(.5,.5,1)]
 ```
 
 This has defined an effect called `panel_idle` that can be controlled
@@ -140,77 +139,111 @@ the next to generate the effect. Blending is cumulative and how colors are
 blended is defined by the blending mode of the top layer.
 Each effect layer is listed on its own line and each has its own settings.
 
+Most effect layers such as breathing and gradient are pre-rendered when 
+Klipper starts in order to save on computing them later. Others such as
+Fire and Twinkle are rendered on the fly. 
+
+Each layer is defined with the following parameters on a single line.
+ * Layer name
+ * Effect Rate
+ * Cutoff
+ * Blending mode
+ * Color palette
+
 ```
 layers:            
-   breathing  .5 screen [(0,.1,1), (0,1,.5), (0, 1,1), (0,.1,.5)]
-   static     1  bottom [(1,.1,0), (1,.1,0), (1,.1,0), (1,1,0)]
+   breathing  .5 screen (0,.1,1), (0,1,.5), (0, 1,1), (0,.1,.5)
+   static     1  bottom (1,.1,0), (1,.1,0), (1,.1,0), (1,1,0)
 ```
-
-The first setting is the type of effect to display. There are several to
-choose from and each has it's own unique behavior.
+There are several effects to choose from.
 
 ### Static
+    Effect Rate:  Not used but must be provided
+    Cutoff:       Not used but must be provided
+    Palette:      Colors are blended evenly across the strip
 A single color is displayed and it does not change. If a palette of multiple
 colors is provided, colors will be evenly blended along the LEDs based on
 difference in hue.
 
 ### Breathing
+    Effect Rate:  3   Duration of a complete cylce
+    Cutoff:       0   Not used but must be provided
+    Palette:          Colors are cycled in order
+
 Colors fade in and out. If a palette of multiple colors is provided, it will 
-cycle through those colors in the order they are in the palette.
+cycle through those colors in the order they are specified in the palette.
 The effect speed parameter controls how long it takes to "breathe" one time.
 
 ### Blink
+    Effect Rate:  1   Duration of a complete cylce
+    Cutoff:       0   Not used but must be provided
+    Palette:          Colors are cycled in order
+
 LEDs are turned fully on and fully off based on the effect speed. If a palette 
-of multiple colors is provided, it will cycle through those colors in order
+of multiple colors is provided, it will cycle through those colors in order. 
 
 ### Strobe
+    Effect Rate:  1   Number of times per second to strobe
+    Cutoff:       1.5 Determines decay rate. A higher number yields quicker decay
+    Palette:          Colors are cycled in order
+
 LEDs are turned fully on and then faded out over time with a decay. If a palette 
-of multiple colors is provided, it will cycle through those colors in order
+of multiple colors is provided, it will cycle through those colors in order. The
+effect rate controls how many times per second the lights will strobe. The cutoff
+parameter controls the decay rate. A good decay rate is 1.5.
 
 ### Twinkle
+    Effect Rate:  1   Increases the probability that an LED will illuminate.
+    Cutoff:       .25 Determines decay rate. A higher number yields quicker decay
+    Palette:          Random color chosen
 Random flashes of light with decay along a strip. If a palette is specified,
 a random color is chosen from the palette.
 
 ### Gradient
-Colors from the palette are cycled through the leds
+    Effect Rate:  1   How fast to cycle through the gradient
+    Cutoff:       0   Not used but must be provided
+    Palette:          Linear gradient with even spacing.
+Colors from the palette are blended into a linear gradient across the length
+of the strip. The effect rate parameter controls the speed at which the colors
+are cycled through.
 
 ### Comet 
+    Effect Rate:  1   How fast the comet moves, negative values change direction
+    Cutoff:       1   Length of tail (somewhat arbitrary)
+    Palette:          Color of "head" and gradient of "tail"
 A light moves through the LEDs with a decay trail. Direction can be controlled
 by using a negative speed value. The palette colors determine the color of the
-comet and the tail. Brightness values for the tail are ignored and only the hue
-value is used.
+comet and the tail. The first color of the palette defines the color of the
+"head" of the comet and the remaining colors are blended into the "tail"
 
 ### Chase
-Similar to comet, but with multiple lights chasing each other.
+    Effect Rate:  1   How fast the comet moves, negative values change direction
+    Cutoff:       1   Length of tail (somewhat arbitrary)
+    Palette:          Color of "head" and gradient of "tail"
+Identical settings as comet, but with multiple lights chasing each other.
 
 ### Heater
-This effect becomes active when the specified heater is at its target temperature
-+/- 5 degrees. It is effectively a solid color.
-
-### Heating
-Colors respond to changes in the temperature of the heater defined in the 
-heater section of the effect. The target temperature is compared to the actual
-temperature and the appropriate color is selected from the palette. If only
-one color is specified in the palette, the brightness will be gradually increased
-to that color until the target is met.
-
-Once the target temperature is met, the layer is disabled and will only display
-black.
-
-### Cooling
-Similar to heater heating, colors are selected from the palette based on how hot
-the specified heater is from a "safe" temperature. The "safe" temperature is
-defined by the layer speed parameter in the config. Color selection from the
-palette is determined by the difference between the current temperature and the
-"safe" temperature. When the heater has cooled and is safe to touch, the layer
-is disabled.
+    Effect Rate:  1   Minimum temperature to activate effect
+    Cutoff:       0   Not used but must be provided
+    Palette:          Color values to blend from Cold to Hot
+This effect becomes active when the specified heater is active or the temperature
+is greater than the minimum specified temperature. For instance, if a heater is
+turned on and set to a target temperature, the LEDs will cycle throug the gradient
+colors until the target temperature is met. Once  it has been met, the last color
+of the gradient is used. If the heater is turned off, the colors will follow this
+pattern in reverse until the temperature falls below the minimum temperature
+specified in the config.
 
 ### AnalogPin
+    Effect Rate:  10  Multiplier for input signal
+    Cutoff:       40  Minimum threshold to trigger effect
+    Palette:          Color values to blend
 This effect uses the value read from an analog pin to determine the color.
 If multiple colors are specified in the palette, it chooses one based on the
 value of the pin. If only one color is specified, the brightness is proportional
 to the pin value. An example usage would be attaching an analog potentiometer
-that controls the brightness of an LED strip.
+that controls the brightness of an LED strip. Internally, input voltage is measured
+as a percentage of voltage vs vref.  
 
 ## Blending Effect Layers
 If you have ever used image editing software you may be familiar with
@@ -312,7 +345,7 @@ run_on_error:                       true
 autostart:                          false
 frame_rate:                         24
 layers:                             
-    breathing 1 2 none [(1,0,0)]
+    breathing 1 2 none (1,0,0)
 ```
 
 ## Bed Idle with Temperature
@@ -320,14 +353,9 @@ layers:
 leds:                               
     neopixel:bed_lights
 autostart:                          true
-basecolor:                          1,0,0
 frame_rate:                         24
 heater:                             heater:bed
 layers:
-    heater  1 2 add  [(1,0,0)]
-    cooling 1 2 add  [(1,1,0),(1,0,0)]                             
-    heating 1 2 add  [(1,1,0),(1,0,0)]
-    static  1 2 none [(1,0,0)]
+    heating 50 0 add    (1,1,0),(1,0,0)
+    static  0  0 bottom (1,0,0)
 
-
-## Disco Infero
