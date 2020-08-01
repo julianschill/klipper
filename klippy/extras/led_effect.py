@@ -16,9 +16,7 @@ ANALOG_REPORT_TIME  = 0.2
 
 
 ## TODO:
-#  Progress Bar
 #  Disable individual layers by layer index
-#
 ############
 
 
@@ -63,6 +61,10 @@ class colorArray(list):
 ######################################################################
 # LED Effect handler
 ######################################################################
+
+class ledFrameHandler:
+    def __init__(self, config):
+        pass
 
 class ledEffect:
     def __init__(self, config):
@@ -140,13 +142,13 @@ class ledEffect:
                         self.getAxisPosition = kin.calc_tag_position
                         self.stepperTimer = self.reactor.register_timer(self._pollStepper, 
                                                 self.reactor.NOW) 
+        self.heaterCurrent   = 0
+        self.heaterTarget    = 0
+        self.heaterLast      = 100  
 
         if self.heater:             
             pheater = self.printer.lookup_object('heaters')
             self.heater = pheater.lookup_heater(self.heater)
-            self.heaterCurrent   = 0
-            self.heaterTarget    = 0
-            self.heaterLast      = 100    
             self.heaterTimer = self.reactor.register_timer(self._pollHeater, self.reactor.NOW) 
 
         self.printProgress = 0
@@ -366,6 +368,12 @@ class ledEffect:
         def _gradient(self, palette, steps, reverse=False):
             #fill the number of steps with an even number of divisions
             palette = colorArray(palette[:])
+
+            if self.effectRate > 0:
+                self.direction = 1
+            else:
+                self.direction = 0
+                self.effectRate *= -1
 
             if len(palette) == 1:
                 return colorArray(palette * steps)
@@ -608,12 +616,13 @@ class ledEffect:
             self.frameCount = len(self.thisFrame)     
             
         def nextFrame(self, eventtime):
-            if self.heaterTarget > 0.0:
+            if self.handler.heaterTarget > 0.0:
                 if self.handler.heaterCurrent <= self.handler.heaterTarget-5:
                     s = int((self.handler.heaterCurrent / self.handler.heaterTarget) * 200)
                     return self.thisFrame[s]
+                elif self.effectCutoff > 0:
+                    return None
                 else:
-                    logging.info(self.thisFrame[-1])
                     return self.thisFrame[-1]
             elif self.effectRate > 0:
                 if self.handler.heaterCurrent >= self.effectRate:
@@ -631,16 +640,18 @@ class ledEffect:
             if len(self.paletteColors) == 1: 
                 self.paletteColors = [0.0,0.0,0.0] + self.paletteColors
 
-            gradient   = colorArray(self._gradient(self.paletteColors, 100))
+            gradient   = colorArray(self._gradient(self.paletteColors, 101))
 
             for i in range(len(gradient)):
                 self.thisFrame.append(gradient[i] * self.ledCount)
 
         def nextFrame(self, eventtime):    
-            self.frameNumber = int(self.handler.analogValue * self.effectRate) 
+            v = int(self.handler.analogValue * self.effectRate) 
 
-            if self.frameNumber > self.effectCutoff:
-                return self.thisFrame[self.frameNumber] 
+            if v > 100: v = 100
+
+            if v > self.effectCutoff:
+                return self.thisFrame[v] 
             else:
                 return self.thisFrame[0]
 

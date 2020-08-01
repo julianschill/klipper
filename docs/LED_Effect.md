@@ -250,17 +250,18 @@ Identical settings as Comet, but with multiple lights chasing each other.
 
 #### Heater
     Effect Rate:  1   Minimum temperature to activate effect
-    Cutoff:       0   Not used but must be provided
+    Cutoff:       0   Disable effect once temp is reached
     Palette:          Color values to blend from Cold to Hot
 This effect becomes active when the specified heater is active or the temperature
 is greater than the minimum specified temperature. For instance, if a heater is
 turned on and set to a target temperature, the LEDs will cycle through the gradient
 colors until the target temperature is met. Once it has been met, the last color
 of the gradient is used and the effect is essentially a static color until the.
-Heater state changes. If the heater is turned off, the colors will follow this
-pattern in reverse until the temperature falls below the minimum temperature
-specified in the config. This can be used to indicate the hotend or bed is in
-a safe state to touch.
+Heater state changes. If the cutoff parameter is supplied, the effect will be
+disabled once the targe temperature is met. If the heater is turned off, 
+the colors will follow this pattern in reverse until the temperature falls 
+below the minimum temperature specified in the config. This can be used to 
+indicate the hotend or bed is in a safe state to touch.
 
 #### AnalogPin
     Effect Rate:  10  Multiplier for input signal
