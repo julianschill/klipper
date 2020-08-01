@@ -285,6 +285,15 @@ on either side. As the stepper position changes relative to the axis length,
 the lights move up and down the strip. It should be noted that the effect
 itself updates stepper position every half second based on the reported position
 of the stepper similar to the GET_POSITION gcode command. It will not be realtime.
+A neagive value in effect rate will fill the entire strip leading up to the stepper
+postion, a negative value in cutoff will fill the entire strip after the stepper position.
+
+#### Progress
+    Effect Rate:  4   Number of trailing LEDs
+    Cutoff:       4   Number of leading LEDs
+    Palette:          Color values to blend
+Exact same configuration as Stepper but instead of reporting stepper position, this
+layer reports print progress.
 
 #### Fire
     Effect Rate:  45  Probability of "sparking"
@@ -414,7 +423,7 @@ frame_rate:                         24
 heater:                             heater:bed
 layers:
     heating 50 0 add    (1,1,0),(1,0,0)
-    static  0  0 bottom (1,0,0)
+    static  0  0 top    (1,0,0)
 ```
 
 ## Brightness Controlled By Potentiometer
@@ -433,11 +442,28 @@ potentiometer and board combination.
 ```
 [led_effect bed_effects]
 leds:                               
-    neopixel:tool_lights
+    neopixel:bed_lights
 autostart:                          true
 frame_rate:                         24
 analog_pin:                         ar52
 layers:
     analogpin 10 0 subtract    (1,1,1)
-    static    0  0 bottom      (1,1,1)
+    static    0  0 top         (1,1,1)
+```
+
+## Progress Bar
+Using a single strip of LEDs, print progress
+is displayed as a light blue line over
+a dark blue background
+
+```
+[led_effect progress_bar]
+leds:                               
+    neopixel:progress_lights
+autostart:                          true
+frame_rate:                         24
+analog_pin:                         ar52
+layers:
+    progress  -1  0 add         ( 0, 0,   1),( 0, 0.1, 0.6)
+    static     0  0 top         ( 0, 0, 0.1)
 ```
