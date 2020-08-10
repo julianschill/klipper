@@ -17,6 +17,8 @@ ANALOG_REPORT_TIME  = 0.2
 
 ## TODO:
 #  Disable individual layers by layer index
+#  Migrate frame callbacks to global effect handler
+#    to do blending between multiple concurrent effects
 ############
 
 
@@ -74,7 +76,7 @@ class ledEffect:
         self.printer.load_object(config, "display_status")
 
         self.iteration    = 0        
-        self.repeat       = 0
+        self.repeat       = 1
         self.layers       = []
 
         self.name         = config.get_name().split()[1]
@@ -231,16 +233,14 @@ class ledEffect:
                                         blendingMode  = parms[3]))
 
         if self.autoStart:
-            self.repeat = 1
             t = self.reactor.NOW
         else:
-            t = self.reactor.NEVER
+            t = self.reactor.NEVER            
 
         self.frameTimer = self.reactor.register_timer(self._getFrames, t)     
-        
-        #TODO Run While Idle
-        #self.printer.register_event_handler('#idle_timeout:idle', self._handle_shutdown)
         self.printer.register_event_handler('klippy:shutdown', self._handle_shutdown)
+        #TODO Run While Idle
+
 
     def cmd_SET_LED_EFFECT(self, gcmd):
         if gcmd.get_int('STOP', 0) == 1:
@@ -251,19 +251,14 @@ class ledEffect:
             self.reactor.update_timer(self.frameTimer, self.reactor.NOW)
 
     def _handle_shutdown(self):
-
         for chain in self.ledChains:
             chain.color_data = [] * (chain.chain_count * 3)
             chain.send_data()
 
+        self.reactor.unregister_timer(self.frameTimer)
+
         if self.runOnShutown:
-            if self.frameTimer:
-                self.reactor.update_timer(self.frameTimer, self.reactor.NOW)            
-            else:
-                self.frameTimer = self.reactor.register_timer(self._getFrames, self.reactor.NOW)    
-        else:
-            if self.frameTimer:
-                self.reactor.unregister_timer(self.frameTimer)
+            self.frameTimer = self.reactor.register_timer(self._getFrames, self.reactor.NOW)    
 
     def _pollHeater(self, eventtime):
         current, target = self.heater.get_temp(eventtime)
@@ -297,11 +292,12 @@ class ledEffect:
         if val > 1.0: return 1.0
         return val
 
-    def _getFrames(self, eventtime):
+    def _getFrames(self, eventtime):      
         frame = [0.0] * 3 * self.ledCount
-     
+        
         for layer in self.layers:
             layerFrame = layer.nextFrame(eventtime)
+        
             if layerFrame:
                 blend = self.blendingModes[layer.blendingMode]
                 frame = [blend(t, b) for t, b in zip(layerFrame, frame)]
@@ -311,9 +307,9 @@ class ledEffect:
             chain =  self.leds[i][0]
             getColorData =  self.leds[i][2] 
             chain.color_data[s:s+3] = getColorData(*frame[i*3:i*3+3])
-
         for chain in self.ledChains:
             chain.send_data()
+
         if self.repeat > 0:
             return eventtime + self.frameRate
         else:
@@ -408,7 +404,7 @@ class ledEffect:
             
             self.thisFrame.append(gradient[0:self.ledCount])   
             self.frameCount = len(self.thisFrame)
-
+            
     #Slow pulsing of color
     class layerBreathing(_layerBase):
         def __init__(self,  **kwargs):
@@ -441,7 +437,7 @@ class ledEffect:
                     self.thisFrame += [[b * i for i in color] * self.ledCount]
 
             self.frameCount = len(self.thisFrame)
-            
+
     #Turns the entire strip on and off
     class layerBlink(_layerBase):    
         def __init__(self, **kwargs):
@@ -495,16 +491,23 @@ class ledEffect:
         def __init__(self, **kwargs):
             super(ledEffect.layerStrobe, self).__init__(**kwargs)
 
+            frameRate  = int(1.0 / self.frameRate)
+            frameCount = int(frameRate * self.effectRate)
+            
             decayTable = self._decayTable(factor=1 / self.effectCutoff,
                                           rate=self.effectRate)
-            frameCount = int(( 1.0 / self.frameRate ) * self.effectRate)
 
+            if len(decayTable) > frameRate:
+                decayTable = decayTable[:frameRate]
+            else:
+                decayTable += [0.0] * (self.frameRate - len(decayTable))
+                
             for c in range(0, len(self.paletteColors)):  
                 color = self.paletteColors[c]  
                   
                 for b in decayTable:                   
                     self.thisFrame += [[b * i for i in color] * self.ledCount]
-
+            
             self.frameCount = len(self.thisFrame)
 
     #Lights move sequentially with decay

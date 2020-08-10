@@ -403,15 +403,16 @@ enters a shutdown state.
 
 ```
 [led_effect critical_error]
-leds:                               
-    neopixel:bed_lights
-    neopixel:tool_lights
-    neopixel:panel_lights
-run_on_error:                       true
-autostart:                          false
-frame_rate:                         24
-layers:                             
-    breathing 1 2 none (1,0,0)
+leds:
+    neopixel:tool_lights      
+    neopixel:bed_lights                     
+layers: 
+    strobe         1  1.5   add        (1.0,  1.0, 1.0)
+    breathing      2  0     difference (0.95, 0.0, 0.0)  
+    static         1  0     top        (1.0,  0.0, 0.0)
+autostart:                             false
+frame_rate:                            24
+run_on_error:                          true
 ```
 
 ## Bed Idle with Temperature
