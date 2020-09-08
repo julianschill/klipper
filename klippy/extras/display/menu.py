@@ -7,7 +7,6 @@
 import os, logging
 from string import Template
 from . import menu_keys
-from .. import gcode_macro
 
 
 class sentinel:
@@ -398,8 +397,8 @@ class MenuContainer(MenuElement):
         return self.select_at(index)
 
     # override
-    def render_container(self, eventtime):
-        return ("", None)
+    def render_container(self, nrows, eventtime):
+        return []
 
     def __iter__(self):
         return iter(self._items)
@@ -551,6 +550,7 @@ class MenuInput(MenuCommand):
 class MenuList(MenuContainer):
     def __init__(self, manager, config):
         super(MenuList, self).__init__(manager, config)
+        self._viewport_top = 0
         # create back item
         self._itemBack = self.manager.menuitem_from({
             'type': 'command',
@@ -563,29 +563,43 @@ class MenuList(MenuContainer):
 
     def _populate(self):
         super(MenuList, self)._populate()
+        self._viewport_top = 0
         #  add back as first item
         self.insert_item(self._itemBack, 0)
 
-    def render_container(self, eventtime):
-        rows = []
-        selected_row = None
+    def render_container(self, nrows, eventtime):
+        manager = self.manager
+        lines = []
+        selected_row = self.selected
+        # adjust viewport
+        if selected_row is not None:
+            if selected_row >= (self._viewport_top + nrows):
+                self._viewport_top = (selected_row - nrows) + 1
+            if selected_row < self._viewport_top:
+                self._viewport_top = selected_row
+        else:
+            self._viewport_top = 0
+        # clamps viewport
+        self._viewport_top = max(0, min(self._viewport_top, len(self) - nrows))
         try:
-            for row, item in enumerate(self):
+            for row in range(self._viewport_top, self._viewport_top + nrows):
                 s = ""
-                selected = (row == self.selected)
-                if selected:
-                    item.heartbeat(eventtime)
-                    selected_row = len(rows)
-                name = str(item.render_name(selected))
-                if isinstance(item, MenuList):
-                    s += name[:self.manager.cols-1].ljust(self.manager.cols-1)
-                    s += '>'
-                else:
-                    s += name[:self.manager.cols].ljust(self.manager.cols)
-                rows.append(s)
+                if row < len(self):
+                    current = self[row]
+                    selected = (row == selected_row)
+                    if selected:
+                        current.heartbeat(eventtime)
+                    name = manager.stripliterals(
+                        manager.aslatin(current.render_name(selected)))
+                    if isinstance(current, MenuList):
+                        s += name[:manager.cols-1].ljust(manager.cols-1)
+                        s += '>'
+                    else:
+                        s += name
+                lines.append(s[:manager.cols].ljust(manager.cols))
         except Exception:
             logging.exception('List rendering error')
-        return ("\n".join(rows), selected_row)
+        return lines
 
 
 class MenuVSDList(MenuList):
@@ -616,8 +630,7 @@ menu_items = {
 }
 
 
-MENU_UPDATE_DELAY = .100
-TIMER_DELAY = .100
+TIMER_DELAY = 1.0
 
 
 class MenuManager:
@@ -626,8 +639,6 @@ class MenuManager:
         self.menuitems = {}
         self.menustack = []
         self.children = {}
-        self.top_row = 0
-        self.timeout_idx = 0
         self.display = display
         self.printer = config.get_printer()
         self.pconfig = self.printer.lookup_object('configfile')
@@ -636,10 +647,9 @@ class MenuManager:
         self.context = {}
         self.root = None
         self._root = config.get('menu_root', '__main')
-        self.cols, self.rows = self.display.lcd_chip.get_dimensions()
+        self.cols, self.rows = self.display.get_dimensions()
         self.timeout = config.getint('menu_timeout', 0)
         self.timer = 0
-        self.eventtime = 0
         # reverse container navigation
         self._reverse_navigation = config.getboolean(
             'menu_reverse_navigation', False)
@@ -665,10 +675,7 @@ class MenuManager:
         reactor.register_timer(self.timer_event, reactor.NOW)
 
     def timer_event(self, eventtime):
-        self.eventtime = eventtime
-        self.timeout_idx = (self.timeout_idx + 1) % 10  # 0.1*10 = 1s
-        if self.timeout_idx == 0:
-            self.timeout_check(eventtime)
+        self.timeout_check(eventtime)
         return eventtime + TIMER_DELAY
 
     def timeout_check(self, eventtime):
@@ -689,7 +696,6 @@ class MenuManager:
 
     def begin(self, eventtime):
         self.menustack = []
-        self.top_row = 0
         self.timer = 0
         if isinstance(self.root, MenuContainer):
             # send begin event
@@ -728,13 +734,11 @@ class MenuManager:
 
     def update_context(self, eventtime):
         # menu default jinja2 context
-        self.context = {
-            'printer': gcode_macro.GetStatusWrapper(self.printer, eventtime),
-            'menu': {
-                'eventtime': eventtime,
-                'back': self._action_back,
-                'exit': self._action_exit
-            }
+        self.context = self.gcode_macro.create_template_context(eventtime)
+        self.context['menu'] = {
+            'eventtime': eventtime,
+            'back': self._action_back,
+            'exit': self._action_exit
         }
 
     def stack_push(self, container):
@@ -789,33 +793,16 @@ class MenuManager:
         container = self.stack_peek()
         if self.running and isinstance(container, MenuContainer):
             container.heartbeat(eventtime)
-            content, viewport_row = container.render_container(eventtime)
-            if viewport_row is not None:
-                while viewport_row >= (self.top_row + self.rows):
-                    self.top_row += 1
-                while viewport_row < self.top_row and self.top_row > 0:
-                    self.top_row -= 1
-            else:
-                self.top_row = 0
-            rows = self.aslatin(content).splitlines()
-            for row in range(0, self.rows):
-                try:
-                    text = self.stripliterals(rows[self.top_row + row])
-                except IndexError:
-                    text = ""
-                lines.append(text.ljust(self.cols))
+            lines = container.render_container(self.rows, eventtime)
         return lines
 
     def screen_update_event(self, eventtime):
         # screen update
-        if self.is_running():
-            self.display.lcd_chip.clear()
-            for y, line in enumerate(self.render(eventtime)):
-                self.display.draw_text(y, 0, line, eventtime)
-            self.display.lcd_chip.flush()
-            return eventtime + MENU_UPDATE_DELAY
-        else:
-            return 0
+        if not self.is_running():
+            return False
+        for y, line in enumerate(self.render(eventtime)):
+            self.display.draw_text(y, 0, line, eventtime)
+        return True
 
     def up(self, fast_rate=False):
         container = self.stack_peek()
@@ -896,6 +883,10 @@ class MenuManager:
             current = container.selected_item()
             if isinstance(current, MenuContainer):
                 self.stack_push(current)
+            elif isinstance(current, MenuInput):
+                if current.is_editing():
+                    current.run_script('gcode', event=event)
+                current.run_script(event)
             elif isinstance(current, MenuCommand):
                 current.run_script('gcode', event=event)
                 current.run_script(event)
@@ -998,6 +989,7 @@ class MenuManager:
             self.down(True)
         elif key == 'back':
             self.back()
+        self.display.request_redraw()
 
     # Collection of manager class helper methods
 
