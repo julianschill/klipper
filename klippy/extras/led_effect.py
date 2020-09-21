@@ -619,7 +619,7 @@ class ledEffect:
             self.frameCount = len(self.thisFrame)     
             
         def nextFrame(self, eventtime):
-            if self.handler.heaterTarget > 0.0:
+            if self.handler.heaterTarget > 0.0 and self.handler.heaterCurrent > 0.0:
                 if self.handler.heaterCurrent <= self.handler.heaterTarget-5:
                     s = int((self.handler.heaterCurrent / self.handler.heaterTarget) * 200)
                     return self.thisFrame[s]
@@ -627,7 +627,7 @@ class ledEffect:
                     return None
                 else:
                     return self.thisFrame[-1]
-            elif self.effectRate > 0:
+            elif self.effectRate > 0 and self.handler.heaterCurrent > 0.0:
                 if self.handler.heaterCurrent >= self.effectRate:
                     s = int(((self.handler.heaterCurrent - self.effectRate) 
                             / self.handler.heaterLast) * 200)
