@@ -60,7 +60,9 @@ Effects are, in a more abstract sense, a _state_ that the strips
 exist in. Effects can be comprised of 1 led or 100. There can be
 one effect layer or 10. It is all arbitrary and extensible. This
 means the only limit to how many layers and leds can be run 
-concurrently is how much 
+concurrently is how much processing power the host OS is capable
+of handling. During initial testing, upwards of 100 LEDs and 12 
+effect layers were run concurrently on a Raspberry Pi 4 at 24 FPS.
 
 ## Basic definition
 
