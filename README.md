@@ -12,6 +12,8 @@ sudo service klipper stop
 You will then need to add this branch as a remote branch to your installation
 ``
 cd ~/klipper
+``
+``
 git remote add mental405 https://github.com/mental405/klipper.git
 ``
 
@@ -23,7 +25,7 @@ git remote
 Once the remote has been added, you will need to pull down the the versioning and branches from github so type
 
 ````
-get fetch --all
+git fetch --all
 ````
 
 You should now be able to switch to the led effects branch by checking it out.
