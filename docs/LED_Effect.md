@@ -97,7 +97,7 @@ autostart:              true
 frame_rate:             24
 leds:                               
     neopixel:panel_ring                       
-effects:
+layers:
     breathing  .5 1 top [(.5,.5,1)]
 ```
 
