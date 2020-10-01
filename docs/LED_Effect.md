@@ -1,3 +1,6 @@
+# LED Effects
+
+
 Addressable LEDs are beginning to supercede RGB LEDs for their
 flexibility and relative ease of use. With each individual element
 capable of displaying an entire spectrum of colors at very high speed, 
@@ -8,7 +11,7 @@ they can be used to create a variety of lighting effects.
 At this time, klipper supports most WS2812 compatible (neopixels)
 and APA102 compatible (dotstar) chips for LED Effects. 
 
-# Wiring WS2812 compatible (neopixel) LEDs
+## Wiring WS2812 compatible (neopixel) LEDs
 
 Neopixel type LEDs require one digital IO pin and a supply of power. 
 Most are 5V but can be driven from a 3V source. Check manufacturer 
@@ -33,7 +36,7 @@ have them show the same colors. It is also possible to specify
 multiple LED chains on different IO pins in the LED Effects 
 configuration settings.
 
-# Wiring APA102 compatible (dotstar) LEDs
+## Wiring APA102 compatible (dotstar) LEDs
 
 APA102 dotstar LEDs are similar to the neopixel LEDs with the exception
 that dotstar uses one-way SPI for communication. This requires the 
@@ -45,8 +48,10 @@ data line.
 
 In your config file, each strip or chain connected to an IO pin must
 have a definition. Following the example in [config/example-extras.cfg](example-extras.cfg) 
-each one's data pin, and, if applicable, clock pin, is defined along
-with the number of LEDs in the chain.
+each strips data pin (and clock pin if applicable) is defined along
+with the number of LEDs in the chain. The LED Effect instances are
+capable of using multiple strips of different types and color orders
+concurrently, but each strip must first be defined by its type.
 
 ```
 [neopixel panel_ring]
@@ -64,7 +69,7 @@ concurrently is how much processing power the host OS is capable
 of handling. During initial testing, upwards of 100 LEDs and 12 
 effect layers were run concurrently on a Raspberry Pi 4 at 24 FPS.
 
-## Basic definition
+## Basic layer definition
 
 For our example printer, there is one neopixel ring with 16 leds
 that is situated on the front panel, and a short segment of 
@@ -105,11 +110,17 @@ This has defined an effect called `panel_idle` that can be controlled
 via the gcode command `SET_LED_EFFECT EFFECT=panel_idle`
 
 ### Additional effect level parameters
-autostart
+
+autostart: true
+Setting this to true
 frame_rate
+
 run_on_error
+
 heater
+
 analog_pin
+
 stepper
 
 ## Defining LEDs 
@@ -265,6 +276,27 @@ the colors will follow this pattern in reverse until the temperature falls
 below the minimum temperature specified in the config. This can be used to 
 indicate the hotend or bed is in a safe state to touch.
 
+#### Fire
+    Effect Rate:  45  Probability of "sparking"
+    Cutoff:       40  Rate of "cooling"
+    Palette:          Color values to blend from "Cold" to "Hot"
+The FastLED library for Arduino has a sample sketch called Fire2012WithPalette
+included with it. This effect is a port of that sketch. It simulates a flame by 
+"sparking" an LED. The "heat" from that LED travels down the length of the LEDs 
+where it gradually cools. A higher rate of sparking causes a greater amount
+of heat to accumulate at the base of the strip resulting a more intense flame.
+Changing the rate of cooling results in longer or shorter overall flames.
+
+#### HeaterFire
+    Effect Rate:  1  Minimum temperature to activate effect
+    Cutoff:       0   Disable effect once temp is reached
+    Palette:          Color values to blend from "Cold" to "Hot"
+The fire effect but responsive to the temperature of the specified heater.
+The flame starts as a small ember and increases in intensity as the heater's
+target temperature is reached. If the cutoff parameter is set to 1, the effect
+will be disabled once the target temperature is reached, otherwise it will
+stay active until the heater is disabled.
+
 #### AnalogPin
     Effect Rate:  10  Multiplier for input signal
     Cutoff:       40  Minimum threshold to trigger effect
@@ -297,18 +329,6 @@ postion, a negative value in cutoff will fill the entire strip after the stepper
     Palette:          Color values to blend
 Exact same configuration as Stepper but instead of reporting stepper position, this
 layer reports print progress.
-
-#### Fire
-    Effect Rate:  45  Probability of "sparking"
-    Cutoff:       40  Rate of "cooling"
-    Palette:          Color values to blend from "Cold" to "Hot"
-The FastLED library for Arduino has a sample sketch called Fire2012WithPalette
-included with it. This effect is a port of that sketch. It simulates a flame by 
-"sparking" an LED. The "heat" from that LED travels down the length of the LEDs 
-where it gradually cools. A higher rate of sparking causes a greater amount
-of heat to accumulate at the base of the strip resulting a more intense flame.
-Changing the rate of cooling results in longer or shorter overall flames.
-
 
 ## Effect Layer Blending
 If you have ever used image editing software you may be familiar with
@@ -424,7 +444,7 @@ leds:
     neopixel:bed_lights
 autostart:                          true
 frame_rate:                         24
-heater:                             heater:bed
+heater:                             heater_bed
 layers:
     heating 50 0 add    (1,1,0),(1,0,0)
     static  0  0 top    (1,0,0)
@@ -471,3 +491,65 @@ layers:
     progress  -1  0 add         ( 0, 0,   1),( 0, 0.1, 0.6)
     static     0  0 top         ( 0, 0, 0.1)
 ```
+
+# Frequently Asked Questions
+
+## My LEDs are flickering randomly
+
+This is usuall due to some sort of signal issue. Most addressable 
+LEDS have a specific protocol they use for communication. It typically
+involves sending bits of data at a specific interval followed by a 
+reset latch to signal them to light up. They will stay the last color
+they were set until told to do something different.
+
+With most implementations of addressable LEDs in printer firmware, the
+color data is sent once when the gcode command is executed and not sent
+again. As long as that initial signal is read, they will stay that color.
+
+With this particular implementation, the color data is being updated at
+regular intervals determined by the effect frame rate. So 10 frames per
+second would result in 10 color updates to the LEDs per second.
+
+The data lines are susceptible to electromagnetic interference from other
+electronics on the printer. When this interference is present, it can 
+result in malformed data going to the LEDs. 
+
+To mitigate this, one can try insulating or isolating the data line from
+other wires. Try to keep the data lines as short as possible. This is 
+especially problematic for 32 bit boards which typically output the
+data signal at 3.3V.
+
+Another source of flickering is voltage drop. Addressable LEDs consume
+between 20 and 60mA of power each depending on how bright they are set.
+If they are being run on a supply that cannot supply enough power, such
+as the internal voltage regulator of a printer board, it could manifest
+as flickering or overall dimness with the strips.
+
+## My LEDs at the ends of the strips are not as bright as the rest
+
+This typically has to do with the LEDs at the ends of the strip not
+getting enough power compared to the LEDs at the beginning of the strip.
+The solution is to solder a VCC and GND wire to the end of the strip.
+These additional power lines will allow the LEDs at the ends to draw
+the power they need. This usually only occurs on very long strips or
+if the power supply is already at its limit. It is always recommended
+to power LEDs like this from a separate 5V source from the board.
+
+## My colors arent correct
+
+Different chip manufacturers and chip styles use slightly different
+protocols for color data. Some specify the color order be Red, Green,
+then Blue others specify Green, Red, Blue. The configuration for the
+LED strip has an optional parameter that can be set to change the color
+order.
+
+``color_order_GRB:                    true``
+
+If you are unsure of the color order of your LEDs and want to test this,
+you can comment out or disable all of the effects you have configured 
+and use a gcode command to set the color of the led strips directly.
+
+``SET_LED LED=<config_name> RED=1 GREEN=0 BLUE=0 TRANSMIT=1``
+
+This command should turn the entire strip red. If the strip turns green,
+then it uses a GRB color order.

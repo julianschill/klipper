@@ -123,7 +123,8 @@ class ledEffect:
 
     def _handle_ready(self):
         self.reactor = self.printer.get_reactor()
-
+        self.mutex  = self.reactor.mutex()
+        
         chains = self.configLeds.split('\n')
 
         if self.stepper:                    
@@ -297,18 +298,20 @@ class ledEffect:
         
         for layer in self.layers:
             layerFrame = layer.nextFrame(eventtime)
-        
+
             if layerFrame:
                 blend = self.blendingModes[layer.blendingMode]
                 frame = [blend(t, b) for t, b in zip(layerFrame, frame)]
-            
-        for i in range(self.ledCount):
-            s = self.leds[i][1]
-            chain =  self.leds[i][0]
-            getColorData =  self.leds[i][2] 
-            chain.color_data[s:s+3] = getColorData(*frame[i*3:i*3+3])
-        for chain in self.ledChains:
-            chain.send_data()
+
+        with self.mutex:
+            for i in range(self.ledCount):
+                s = self.leds[i][1]
+                chain =  self.leds[i][0]
+                getColorData =  self.leds[i][2] 
+                chain.color_data[s:s+3] = getColorData(*frame[i*3:i*3+3])
+                
+            for chain in self.ledChains:
+                chain.send_data()
 
         if self.repeat > 0:
             return eventtime + self.frameRate
@@ -615,7 +618,7 @@ class ledEffect:
             
             for i in range(len(gradient)):
                 self.thisFrame.append(gradient[i] * self.ledCount)
- 
+                
             self.frameCount = len(self.thisFrame)     
             
         def nextFrame(self, eventtime):
@@ -712,7 +715,7 @@ class ledEffect:
             self.frameLen   = len(self.gradient)
             self.heatLen    = len(self.heatMap)
             self.heatSource = int(self.ledCount / 10.0)
-            self.effectRate = int(100 - self.effectRate)
+            self.effectRate = int(self.effectRate)
 
             if self.heatSource < 1:
                 self.heatSource = 1
@@ -731,7 +734,7 @@ class ledEffect:
 
                 self.heatMap[i] = d * (d >= 0)
 
-            if randint(0, 100) > self.effectRate:
+            if randint(0, 100) < self.effectRate:
                 h = randint(0, self.heatSource)
                 self.heatMap[h] += randint(90,100)
                 if self.heatMap[h] > 100: 
@@ -741,6 +744,73 @@ class ledEffect:
                 frame += self.gradient[int(h)] 
 
             return frame
+
+    class layerHeaterFire(_layerBase):
+        def __init__(self,  **kwargs):
+            super(ledEffect.layerHeaterFire, self).__init__(**kwargs)
+
+            self.heatMap    = [0.0] * self.ledCount
+            self.gradient   = colorArray(self._gradient(self.paletteColors, 102))
+            self.frameLen   = len(self.gradient)
+            self.heatLen    = len(self.heatMap)
+            self.heatSource = int(self.ledCount / 10.0)
+            self.effectRate = 0
+
+            if self.heatSource < 1:
+                self.heatSource = 1
+
+        def nextFrame(self, eventtime):
+            frame = []
+            spark = 0
+            heaterTarget  = self.handler.heaterTarget
+            heaterCurrent = self.handler.heaterCurrent
+            heaterLast    = self.handler.heaterLast
+            
+            if heaterTarget > 0.0 and heaterCurrent > 0.0:
+                if heaterCurrent <= heaterTarget-5:
+                    spark = int((heaterCurrent / heaterTarget) * 80)
+                    brightness = int((heaterCurrent / heaterTarget) * 100)
+                elif self.effectCutoff > 0:
+                    spark = 0
+                else:
+                    spark = 80
+                    brightness = 100
+            elif self.effectRate > 0 and heaterCurrent > 0.0:
+                if heaterCurrent >= self.effectRate:
+                    spark = int(((heaterCurrent - self.effectRate) 
+                                      / heaterLast) * 80)
+                    brightness = int(((heaterCurrent - self.effectRate) 
+                                      / heaterLast) * 100)
+                                      
+            if spark > 0:
+                cooling = int((heaterCurrent / heaterTarget) * 20)
+
+                for h in range(self.heatLen):
+                    c = randint(0, cooling)
+                    self.heatMap[h] -= (self.heatMap[h] - c >= 0 ) * c
+
+                for i in range(self.ledCount - 1, 2, -1):
+                    d = (self.heatMap[i - 1] + 
+                         self.heatMap[i - 2] + 
+                         self.heatMap[i - 3] ) / 3
+
+                    self.heatMap[i] = d * (d >= 0)
+
+                if randint(0, 100) < spark:
+                    h = randint(0, self.heatSource)
+                    self.heatMap[h] += brightness
+                    if self.heatMap[h] > 100: 
+                        self.heatMap[h] = 100
+
+                for h in self.heatMap:
+                    frame += self.gradient[int(h)] 
+
+                return frame
+
+            else:
+                return None
+
+
 
     class layerProgress(_layerBase):
         def __init__(self,  **kwargs):
