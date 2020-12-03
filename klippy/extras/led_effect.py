@@ -172,16 +172,19 @@ class ledEffect:
                 ledIndices   = ''.join(parms[1:]).strip('()').split(',')
 
                 #Add a call for each chain that orders the colors correctly
-                if hasattr(ledChain, 'color_order_GRB') and ledChain.color_order_GRB: 
-                    getColorData = (lambda r, g, b:             
-                                    ( int(self._clamp(g) * 254.0), 
-                                      int(self._clamp(r) * 254.0), 
-                                      int(self._clamp(b) * 254.0)))                
-                else:         
-                    getColorData = (lambda r, g, b:        
-                                    ( int(self._clamp(r) * 254.0), 
-                                      int(self._clamp(g) * 254.0), 
-                                      int(self._clamp(b) * 254.0)))
+                
+                if hasattr(ledChain, 'color_order'):
+                    if ledChain.color_order == 'RGB':
+                        getColorData = (lambda r, g, b:             
+                                        ( int(self._clamp(g) * 254.0), 
+                                          int(self._clamp(r) * 254.0), 
+                                          int(self._clamp(b) * 254.0)))    
+
+                    if ledChain.color_order == 'GRB':
+                        getColorData = (lambda r, g, b:             
+                                        ( int(self._clamp(g) * 254.0), 
+                                          int(self._clamp(r) * 254.0), 
+                                          int(self._clamp(b) * 254.0))) 
 
                 #Add each discrete chain to the collection
                 if ledChain not in self.ledChains:

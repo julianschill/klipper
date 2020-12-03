@@ -6,15 +6,8 @@
 import logging
 
 BACKGROUND_PRIORITY_CLOCK = 0x7fffffff00000000
+MAX_MCU_SIZE = 500
 
-<<<<<<< HEAD
-=======
-BIT_MAX_TIME=.000004
-RESET_MIN_TIME=.000050
-
-MAX_MCU_SIZE = 500  # Sanity check on LED chain length
-
->>>>>>> upstream/master
 class PrinterNeoPixel:
     def __init__(self, config):
         self.printer = config.get_printer()
@@ -30,15 +23,6 @@ class PrinterNeoPixel:
         formats = {v: v for v in ["RGB", "GRB", "RGBW", "GRBW"]}
         self.color_order = config.getchoice("color_order", formats, "GRB")
         elem_size = len(self.color_order)
-        self.chain_count = config.getint('chain_count', 1, minval=1,
-                                         maxval=MAX_MCU_SIZE//elem_size)
-        self.neopixel_update_cmd = self.neopixel_send_cmd = None
-        # Initial color
-        self.color_data = bytearray(self.chain_count * elem_size)
-        red = config.getfloat('initial_RED', 0., minval=0., maxval=1.)
-        green = config.getfloat('initial_GREEN', 0., minval=0., maxval=1.)
-        blue = config.getfloat('initial_BLUE', 0., minval=0., maxval=1.)
-<<<<<<< HEAD
 
         self.bitMaxTime = config.getfloat('bit_max_time', 
                                            minval   =2.0,
@@ -50,30 +34,28 @@ class PrinterNeoPixel:
                                            maxval   =100.0,
                                            default  =60.0) / 1000000.0
 
-        self.update_color_data(red, green, blue)
-        self.printer.register_event_handler("klippy:Sconnect", self.send_data)
-=======
+        self.chain_count = config.getint('chain_count', 1, minval=1,
+                                         maxval=MAX_MCU_SIZE//elem_size)
+        self.neopixel_update_cmd = self.neopixel_send_cmd = None
+        # Initial color
+        self.color_data = bytearray(self.chain_count * elem_size)
+        red = config.getfloat('initial_RED', 0., minval=0., maxval=1.)
+        green = config.getfloat('initial_GREEN', 0., minval=0., maxval=1.)
+        blue = config.getfloat('initial_BLUE', 0., minval=0., maxval=1.)
         white = 0
         if elem_size == 4:
             white = config.getfloat('initial_WHITE', 0., minval=0., maxval=1.)
         self.update_color_data(red, green, blue, white)
         self.old_color_data = bytearray([d ^ 1 for d in self.color_data])
->>>>>>> upstream/master
         # Register commands
         self.printer.register_event_handler("klippy:connect", self.send_data)
         gcode = self.printer.lookup_object('gcode')
         gcode.register_mux_command("SET_LED", "LED", name, self.cmd_SET_LED,
                                    desc=self.cmd_SET_LED_help)
     def build_config(self):
-<<<<<<< HEAD
         bmt = self.mcu.seconds_to_clock(self.bitMaxTime)
         rmt = self.mcu.seconds_to_clock(self.resetMinTime)
-        self.mcu.add_config_cmd("config_neopixel oid=%d pin=%s"
-=======
-        bmt = self.mcu.seconds_to_clock(BIT_MAX_TIME)
-        rmt = self.mcu.seconds_to_clock(RESET_MIN_TIME)
         self.mcu.add_config_cmd("config_neopixel oid=%d pin=%s data_size=%d"
->>>>>>> upstream/master
                                 " bit_max_ticks=%d reset_min_ticks=%d"
                                 % (self.oid, self.pin, len(self.color_data),
                                    bmt, rmt))
@@ -136,6 +118,7 @@ class PrinterNeoPixel:
         else:
             logging.info("Neopixel update did not succeed")
     cmd_SET_LED_help = "Set the color of an LED"
+
     def cmd_SET_LED(self, gcmd):
         # Parse parameters
         red = gcmd.get_float('RED', 0., minval=0., maxval=1.)
@@ -144,16 +127,7 @@ class PrinterNeoPixel:
         white = gcmd.get_float('WHITE', 0., minval=0., maxval=1.)
         index = gcmd.get_int('INDEX', None, minval=1, maxval=self.chain_count)
         transmit = gcmd.get_int('TRANSMIT', 1)
-<<<<<<< HEAD
-        self.update_color_data(red, green, blue, index)
-        # Send command
-        if not transmit:
-            return
-        #print_time = self.printer.lookup_object('toolhead').get_last_move_time()
-        #self.send_data(self.mcu.print_time_to_clock(print_time))
-        self.send_data()
-        
-=======
+
         # Update and transmit data
         def reactor_bgfunc(print_time):
             with self.mutex:
@@ -166,6 +140,5 @@ class PrinterNeoPixel:
         toolhead = self.printer.lookup_object('toolhead')
         toolhead.register_lookahead_callback(lookahead_bgfunc)
 
->>>>>>> upstream/master
 def load_config_prefix(config):
     return PrinterNeoPixel(config)

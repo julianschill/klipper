@@ -197,8 +197,4 @@ command_neopixel_send(uint32_t *args)
     int ret = send_data(n);
     sendf("neopixel_result oid=%c success=%c", oid, ret ? 0 : 1);
 }
-<<<<<<< HEAD
-DECL_COMMAND_FLAGS(command_neopixel_send, HF_IN_SHUTDOWN, "neopixel_send oid=%c data=%*s");
-=======
-DECL_COMMAND(command_neopixel_send, "neopixel_send oid=%c");
->>>>>>> upstream/master
+DECL_COMMAND_FLAGS(command_neopixel_send, HF_IN_SHUTDOWN, "neopixel_send oid=%c");
