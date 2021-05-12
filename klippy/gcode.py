@@ -1,13 +1,17 @@
 # Parse gcode commands
 #
-# Copyright (C) 2016-2020  Kevin O'Connor <kevin@koconnor.net>
+# Copyright (C) 2016-2021  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import os, re, logging, collections, shlex
-import homing
+
+class CommandError(Exception):
+    pass
+
+Coord = collections.namedtuple('Coord', ('x', 'y', 'z', 'e'))
 
 class GCodeCommand:
-    error = homing.CommandError
+    error = CommandError
     def __init__(self, gcode, command, commandline, params, need_ack):
         self._command = command
         self._commandline = commandline
@@ -68,7 +72,8 @@ class GCodeCommand:
 
 # Parse and dispatch G-Code commands
 class GCodeDispatch:
-    error = homing.CommandError
+    error = CommandError
+    Coord = Coord
     def __init__(self, printer):
         self.printer = printer
         self.is_fileinput = not not printer.get_start_args().get("debuginput")
@@ -290,7 +295,10 @@ class GCodeDispatch:
         # Get Firmware Version and Capabilities
         software_version = self.printer.get_start_args().get('software_version')
         kw = {"FIRMWARE_NAME": "Klipper", "FIRMWARE_VERSION": software_version}
-        gcmd.ack(" ".join(["%s:%s" % (k, v) for k, v in kw.items()]))
+        msg = " ".join(["%s:%s" % (k, v) for k, v in kw.items()])
+        did_ack = gcmd.ack(msg)
+        if not did_ack:
+            gcmd.respond_info(msg)
     def request_restart(self, result):
         if self.is_printer_ready:
             toolhead = self.printer.lookup_object('toolhead')

@@ -34,6 +34,7 @@ for the "Linux process":
 cd ~/klipper/
 make menuconfig
 ```
+In the menu, set "Microcontroller Architecture" to "Linux process," then save and exit.
 
 To build and install the new micro-controller code, run:
 ```
@@ -54,8 +55,8 @@ Remaining configuration
 
 Complete the installation by configuring Klipper secondary MCU
 following the instructions in
-[RaspberryPi sample config](https://github.com/KevinOConnor/klipper/tree/master/config/sample-raspberry-pi.cfg) and
-[Multi MCU sample config](https://github.com/KevinOConnor/klipper/tree/master/config/sample-multi-mcu.cfg).
+[RaspberryPi sample config](../config/sample-raspberry-pi.cfg) and
+[Multi MCU sample config](../config/sample-multi-mcu.cfg).
 
 Optional: Identify the correct gpiochip
 =======================================
