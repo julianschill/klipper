@@ -17,8 +17,7 @@ ANALOG_REPORT_TIME  = 0.2
 
 ## TODO:
 #  Disable individual layers by layer index
-#  Migrate frame callbacks to global effect handler
-#    to do blending between multiple concurrent effects
+#  Blending between multiple concurrent effects
 ############
 
 
@@ -66,68 +65,45 @@ class colorArray(list):
 
 class ledFrameHandler:
     def __init__(self, config):
-        pass
-
-class ledEffect:
-    def __init__(self, config):
-        self.config       = config
-        self.printer      = config.get_printer()
-        self.gcode        = self.printer.lookup_object('gcode')
+        self.printer = config.get_printer()
+        self.gcode   = self.printer.lookup_object('gcode')
         self.printer.load_object(config, "display_status")
-
-        self.iteration    = 0        
-        self.repeat       = 1
-        self.layers       = []
-
-        self.name         = config.get_name().split()[1]
-        self.frameRate    = 1.0 / config.getfloat('frame_rate', default=24, minval=1, maxval=60)
-        self.autoStart    = config.getboolean('autostart', False)
-        self.runOnShutown = config.getboolean('run_on_error', False)
-        self.heater       = config.get('heater', None)
-        self.analogPin    = config.get('analog_pin', None)
-        self.stepper      = config.get('stepper', None)
-        self.configLayers = config.get('layers')
-        self.configLeds   = config.get('leds')
-
-        self.blendingModes  = {'top'       : (lambda t, b: t ),
-                               'bottom'    : (lambda t, b: b ),
-                               'add'       : (lambda t, b: t + b ),
-                               'subtract'  : (lambda t, b: (t - b) * (t - b > 0)),
-                               'difference': (lambda t, b: (t - b) * (t > b) + (b - t) * (t <= b)),
-                               'average'   : (lambda t, b: 0.5 * (a + b)),
-                               'multiply'  : (lambda t, b: t * b),
-                               'divide'    : (lambda t, b: t / b if b > 0 else 0 ),
-                               'screen'    : (lambda t, b: 1.0 - (1.0-t)*(1.0-b) ),
-                               'lighten'   : (lambda t, b: t * (t > b) +  b * (t <= b)),
-                               'darken'    : (lambda t, b: t * (t < b) +  b * (t >= b)),
-                               'overlay'   : (lambda t, b:  
-                                                    2.0 * t * b if t > 0.5 else 1.0 - (2.0 * (1.0-t) * (1.0-b))) }
-
-        if self.analogPin:
-            self.analogValue = [0.0, 0.0, 0.0]
-            ppins = self.printer.lookup_object('pins')
-            mcu_adc = ppins.setup_pin('adc', self.analogPin)
-            mcu_adc.setup_adc_callback(ANALOG_REPORT_TIME, self.adcCallback)
-            mcu_adc.setup_minmax(ANALOG_SAMPLE_TIME, ANALOG_SAMPLE_COUNT)
-            query_adc = self.printer.load_object(self.config, 'query_adc')
-            query_adc.register_adc(self.name, mcu_adc)
-
-        
-        
+        self.analogPins = []
+        self.heaters = []
+        self.effects = []
+        self.heaterCurrent   = 0
+        self.heaterTarget    = 0
+        self.heaterLast      = 0  
         self.printer.register_event_handler('klippy:ready', self._handle_ready)
-        self.gcode.register_mux_command('SET_LED_EFFECT', 'EFFECT', self.name,
-                                         self.cmd_SET_LED_EFFECT,
-                                         desc=self.cmd_SET_LED_help)
-
-    cmd_SET_LED_help = 'Starts or Stops the specified led_effect'
+        self.ledChains=[]
 
     def _handle_ready(self):
         self.reactor = self.printer.get_reactor()
-        self.mutex  = self.reactor.mutex()
+        self.printer.register_event_handler('klippy:shutdown', self._handle_shutdown)
+        self.printProgress = 0
+        self.displayStatus = self.printer.lookup_object('display_status')
+        self.progressTimer = self.reactor.register_timer(self._pollProgress, self.reactor.NOW) 
+        self.frameTimer    = self.reactor.register_timer(self._getFrames, self.reactor.NOW)
         
-        chains = self.configLeds.split('\n')
+    def _handle_shutdown(self):
+        for effect in self.effects:
+            if not effect.run_on_error:
+                for chain in self.ledChains:
+                    chain.color_data = [] * (chain.chain_count * 3)
+                    chain.send_data()
+                        
+        pass        
 
-        if self.stepper:                    
+    def addEffect(self, effect):
+
+        if effect.heater:
+            pheater = self.printer.lookup_object('heaters')
+            self.heaters[effect.heater] = pheater.lookup_heater(effect.heater)
+
+            if not self.heaterTimer:
+                self.heaterTimer = self.reactor.register_timer(self._pollHeater, self.reactor.NOW) 
+
+        if effect.stepper:                    
             self.stepperPosition = 0
             self.toolhead = self.printer.lookup_object('toolhead')
             kin = self.toolhead.get_kinematics()
@@ -145,47 +121,166 @@ class ledEffect:
                         self.getAxisPosition = kin.calc_tag_position
                         self.stepperTimer = self.reactor.register_timer(self._pollStepper, 
                                                 self.reactor.NOW) 
-        self.heaterCurrent   = 0
-        self.heaterTarget    = 0
-        self.heaterLast      = 100  
 
-        if self.heater:             
-            pheater = self.printer.lookup_object('heaters')
-            self.heater = pheater.lookup_heater(self.heater)
-            self.heaterTimer = self.reactor.register_timer(self._pollHeater, self.reactor.NOW) 
+        if effect.analogPin:
+            ppins = self.printer.lookup_object('pins')
+            mcu_adc = ppins.setup_pin('adc', self.analogPin)
+            mcu_adc.setup_adc_callback(ANALOG_REPORT_TIME, self.adcCallback)
+            mcu_adc.setup_minmax(ANALOG_SAMPLE_TIME, ANALOG_SAMPLE_COUNT)
+            query_adc = self.printer.load_object(self.config, 'query_adc')
+            query_adc.register_adc(self.name, mcu_adc)
 
-        self.printProgress = 0
-        self.displayStatus = self.printer.lookup_object('display_status')
-        self.progressTimer = self.reactor.register_timer(self._pollProgress, self.reactor.NOW) 
+        self.effects.append(effect)
 
+
+    def _pollHeater(self, eventtime):
+        current, target = self.heater.get_temp(eventtime)
+        self.heaterCurrent = current
+        self.heaterTarget  = target
+        if target > 0:
+            self.heaterLast = target
+        return eventtime + 1
+
+    def _pollStepper(self, eventtime):
+        p = self.getAxisPosition()[self.stepperAxis]
+        if p >= self.stepperRange[0] and p <= self.stepperRange[1]:
+            self.stepperPosition = int((self._clamp((p / (self.stepperRange[1] - 
+                                        self.stepperRange[0]))) * 100) - 1)
+        return eventtime + .5
+
+    def _pollProgress(self, eventtime):
+        p = self.displayStatus.progress
+        if p:
+            self.printProgress = int(p * 100)
+        return eventtime + 1
+
+    def _getFrames(self, eventtime):      
+        chains = set()
+        
+        for effect in self.effects:
+            if eventtime > effect.nextEventTime:
+                frame = effect.getFrame(eventtime)
+                if frame: 
+                    for i in range(effect.ledCount):
+                        s = effect.leds[i][1]
+                        chain =  effect.leds[i][0]
+                        getColorData =  effect.leds[i][2] 
+                        #TODO: blend instead overwrite
+                        chain.color_data[s:s+len(chain.color_order)] = getColorData(*frame[i*3:i*3+3])
+                    
+                    for chain in effect.ledChains:
+                        chains.add(chain)
+                
+        for chain in chains:
+            chain.send_data()   
+
+        return min(self.effects, key=lambda x: x.nextEventTime).nextEventTime
+        
+    def adcCallback(self, read_time, read_value):
+        self.analogValue = int(read_value * 1000) / 10.0                
+
+def load_config(config):
+    return ledFrameHandler(config)
+
+######################################################################
+# LED Effect
+######################################################################
+
+class ledEffect:
+    def __init__(self, config):
+        self.config       = config
+        self.printer      = config.get_printer()
+        self.gcode        = self.printer.lookup_object('gcode')
+        self.handler      = self.printer.load_object(config, 'led_effect')
+        self.frameRate    = 1.0 / config.getfloat('frame_rate', default=24, minval=1, maxval=60)
+        self.enabled      = False
+        self.iteration    = 0        
+        self.layers       = []
+
+        #Basic functions for layering colors. t=top and b=bottom color
+        self.blendingModes  = {
+            'top'       : (lambda t, b: t ),
+            'bottom'    : (lambda t, b: b ),
+            'add'       : (lambda t, b: t + b ),
+            'subtract'  : (lambda t, b: (t - b) * (t - b > 0)),
+            'difference': (lambda t, b: (t - b) * (t > b) + (b - t) * (t <= b)),
+            'average'   : (lambda t, b: 0.5 * (a + b)),
+            'multiply'  : (lambda t, b: t * b),
+            'divide'    : (lambda t, b: t / b if b > 0 else 0 ),
+            'screen'    : (lambda t, b: 1.0 - (1.0-t)*(1.0-b) ),
+            'lighten'   : (lambda t, b: t * (t > b) +  b * (t <= b)),
+            'darken'    : (lambda t, b: t * (t < b) +  b * (t >= b)),
+            'overlay'   : (lambda t, b: 2.0 * t * b if t > 0.5 else 1.0 - (2.0 * (1.0-t) * (1.0-b)))
+           }
+
+        self.name         = config.get_name().split()[1]
+        
+        self.autoStart    = config.getboolean('autostart', False)
+        self.runOnShutown = config.getboolean('run_on_error', False)
+        self.heater       = config.get('heater', None)
+        self.analogPin    = config.get('analog_pin', None)
+        self.stepper      = config.get('stepper', None)
+        self.configLayers = config.get('layers')
+        self.configLeds   = config.get('leds')
+
+        self.nextEventTime = 0
+        self.printer.register_event_handler('klippy:ready', self._handle_ready)
+        self.gcode.register_mux_command('SET_LED_EFFECT', 'EFFECT', self.name,
+                                         self.cmd_SET_LED_EFFECT,
+                                         desc=self.cmd_SET_LED_help)
+
+    cmd_SET_LED_help = 'Starts or Stops the specified led_effect'
+
+    def _handle_ready(self):
+        chains = self.configLeds.split('\n')
         self.ledChains    = []
         self.leds         = []
-
+        self.enabled = self.autoStart
         #map each LED from the chains to the "pixels" in the effect frame
         for chain in chains:
             chain = chain.strip()
             parms = [parameter.strip() for parameter in chain.split(' ')
                         if parameter.strip()]
 
+
             if parms:
                 ledChain     = self.printer.lookup_object(parms[0].replace(':',' '))
                 ledIndices   = ''.join(parms[1:]).strip('()').split(',')
 
-                #Add a call for each chain that orders the colors correctly
-                
+                #Add a call for each chain that orders the colors correctly 
+                #and clamps #values to between 0 and 1
+    
                 if hasattr(ledChain, 'color_order'):
+                    clamp = (lambda x : 0.0 if x < 0.0 else 1.0 if x > 1.0 else x)
                     if ledChain.color_order == 'RGB':
                         getColorData = (lambda r, g, b:             
-                                        ( int(self._clamp(g) * 254.0), 
-                                          int(self._clamp(r) * 254.0), 
-                                          int(self._clamp(b) * 254.0)))    
+                                        ( int(clamp(g) * 254.0), 
+                                          int(clamp(r) * 254.0), 
+                                          int(clamp(b) * 254.0)))    
 
                     if ledChain.color_order == 'GRB':
                         getColorData = (lambda r, g, b:             
-                                        ( int(self._clamp(g) * 254.0), 
-                                          int(self._clamp(r) * 254.0), 
-                                          int(self._clamp(b) * 254.0))) 
+                                        ( int(clamp(g) * 254.0), 
+                                          int(clamp(r) * 254.0), 
+                                          int(clamp(b) * 254.0))) 
 
+#TODO: Convert to real RGBW:
+                    if ledChain.color_order == 'RGBW':
+                        getColorData = (lambda r, g, b:             
+                                        ( int(clamp(r) * 254.0), 
+                                          int(clamp(g) * 254.0), 
+                                          int(clamp(b) * 254.0),
+                                          0))
+                    
+                    if ledChain.color_order == 'GRBW':
+                        getColorData = (lambda r, g, b:             
+                                        ( int(clamp(g) * 254.0), 
+                                          int(clamp(r) * 254.0), 
+                                          int(clamp(b) * 254.0),
+                                          0))
+
+                color_len = len(ledChain.color_order)
+    
                 #Add each discrete chain to the collection
                 if ledChain not in self.ledChains:
                     self.ledChains.append(ledChain)
@@ -195,13 +290,13 @@ class ledEffect:
                         if '-' in led:
                             start, stop = map(int,led.split('-'))
                             for i in range(start-1, stop-1):
-                                self.leds.append([ledChain, int(i) * 3, getColorData])
+                                self.leds.append([ledChain, int(i) * color_len, getColorData])
                         else:
                             for i in led.split(','):
-                                self.leds.append([ledChain,(int(i)-1) * 3, getColorData])
+                                self.leds.append([ledChain,(int(i)-1) * color_len, getColorData])
                     else:
                         for i in range(ledChain.chain_count):
-                            self.leds.append([ledChain, int(i) * 3, getColorData])
+                            self.leds.append([ledChain, int(i) * color_len, getColorData])
   
         self.ledCount = len(self.leds)
 
@@ -236,68 +331,16 @@ class ledEffect:
                                         ledCount      = len(self.leds),
                                         blendingMode  = parms[3]))
 
-        if self.autoStart:
-            t = self.reactor.NOW
-        else:
-            t = self.reactor.NEVER            
+        self.handler.addEffect(self)          
 
-        self.frameTimer = self.reactor.register_timer(self._getFrames, t)     
-        self.printer.register_event_handler('klippy:shutdown', self._handle_shutdown)
-        #TODO Run While Idle
-
-
-    def cmd_SET_LED_EFFECT(self, gcmd):
-        if gcmd.get_int('STOP', 0) == 1:
-            self.repeat = 0
-            self.reactor.update_timer(self.frameTimer, self.reactor.NEVER)
-        else:            
-            self.repeat = 1
-            self.reactor.update_timer(self.frameTimer, self.reactor.NOW)
-
-    def _handle_shutdown(self):
-        for chain in self.ledChains:
-            chain.color_data = [] * (chain.chain_count * 3)
-            chain.send_data()
-
-        self.reactor.unregister_timer(self.frameTimer)
-
-        if self.runOnShutown:
-            self.frameTimer = self.reactor.register_timer(self._getFrames, self.reactor.NOW)    
-
-    def _pollHeater(self, eventtime):
-        current, target = self.heater.get_temp(eventtime)
-        self.heaterCurrent = current
-        self.heaterTarget  = target
-        if target > 0:
-            self.heaterLast = target
-
-        return eventtime + 1
-
-    def _pollStepper(self, eventtime):
-        p = self.getAxisPosition()[self.stepperAxis]
-        if p >= self.stepperRange[0] and p <= self.stepperRange[1]:
-            self.stepperPosition = int((self._clamp((p / (self.stepperRange[1] - 
-                                        self.stepperRange[0]))) * 100) - 1)
-        return eventtime + .5
-
-    def _pollProgress(self, eventtime):
-        p = self.displayStatus.progress
+    def getFrame(self, eventtime):      
         
-        if p:
-            self.printProgress = int(p * 100)
-
-        return eventtime + 1
-
-    def adcCallback(self, read_time, read_value):
-        self.analogValue = int(read_value * 1000) / 10.0
-
-    def _clamp(self, val):
-        if val < 0.0: return 0.0
-        if val > 1.0: return 1.0
-        return val
-
-    def _getFrames(self, eventtime):      
         frame = [0.0] * 3 * self.ledCount
+        if not self.enabled:
+            self.nextEventTime = 9999999999999999
+            return frame
+        else:
+            self.nextEventTime = eventtime + self.frameRate
         
         for layer in self.layers:
             layerFrame = layer.nextFrame(eventtime)
@@ -305,24 +348,22 @@ class ledEffect:
             if layerFrame:
                 blend = self.blendingModes[layer.blendingMode]
                 frame = [blend(t, b) for t, b in zip(layerFrame, frame)]
+        return frame
 
-        with self.mutex:
-            for i in range(self.ledCount):
-                s = self.leds[i][1]
-                chain =  self.leds[i][0]
-                getColorData =  self.leds[i][2] 
-                chain.color_data[s:s+3] = getColorData(*frame[i*3:i*3+3])
-                
-            for chain in self.ledChains:
-                chain.send_data()
+    def enable(self, state):
+        self.enable = state
+        if state:
+            self.nextEventTime = 0
+            
+    def cmd_SET_LED_EFFECT(self, gcmd):
+        if gcmd.get_int('STOP', 0) == 1:
+            self.enable(False)
+        else:            
+            self.enable(True)
 
-        if self.repeat > 0:
-            return eventtime + self.frameRate
-        else:
-            for chain in self.ledChains:
-                chain.color_data = [] * (chain.chain_count * 3)
-                chain.send_data()
-            return self.reactor.NEVER
+    def _handle_shutdown(self):
+        self.enable(self.runOnShutown)
+
 
     ######################################################################
     # LED Effect layers
@@ -397,6 +438,10 @@ class ledEffect:
                 thisColor = nextColor
 
             return gradient
+
+    #Individual effects inherit from the LED Effect Base class
+    #each effect must support the nextFrame() method either by
+    #using the method from the base class or overriding it.
 
     #Solid color
     class layerStatic(_layerBase):
@@ -708,7 +753,9 @@ class ledEffect:
             return self.thisFrame[(p - 1) * (p > 0)]
 
      #Shameless port of Fire2012 by Mark Kriegsman 
-    # from the Arduino FastLED example files
+  
+    #Shamelessly appropriated from the Arduino FastLED example files
+    #Fire2012.ino by Daniel Garcia
     class layerFire(_layerBase):
         def __init__(self,  **kwargs):
             super(ledEffect.layerFire, self).__init__(**kwargs)
@@ -748,6 +795,7 @@ class ledEffect:
 
             return frame
 
+    #Fire that responds relative to actual vs target temp
     class layerHeaterFire(_layerBase):
         def __init__(self,  **kwargs):
             super(ledEffect.layerHeaterFire, self).__init__(**kwargs)
@@ -813,8 +861,7 @@ class ledEffect:
             else:
                 return None
 
-
-
+    #Progress bar using M73 gcode command
     class layerProgress(_layerBase):
         def __init__(self,  **kwargs):
             super(ledEffect.layerProgress, self).__init__(**kwargs)
@@ -859,3 +906,4 @@ class ledEffect:
 
 def load_config_prefix(config):
     return ledEffect(config)
+
