@@ -2,6 +2,7 @@
 # using neopixel and dotstar LEDs
 #
 # Copyright (C) 2020  Paul McGowan <mental405@gmail.com>
+# changed by Julian Schill <j.schill@web.de>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
@@ -19,7 +20,6 @@ ANALOG_REPORT_TIME  = 0.2
 #  Disable individual layers by layer index
 #  Blending between multiple concurrent effects
 ############
-
 
 ######################################################################
 # Custom color value list, returns lists of [r, g ,b] values
@@ -76,6 +76,11 @@ class ledFrameHandler:
         self.heaterLast      = 0  
         self.printer.register_event_handler('klippy:ready', self._handle_ready)
         self.ledChains=[]
+        self.gcode.register_command('STOP_LED_EFFECTS', 
+                                         self.cmd_STOP_LED_EFFECTS,
+                                         desc=self.cmd_STOP_LED_EFFECTS_help)
+
+    cmd_STOP_LED_EFFECTS_help = 'Stops all led_effects'
 
     def _handle_ready(self):
         self.reactor = self.printer.get_reactor()
@@ -155,29 +160,34 @@ class ledFrameHandler:
         return eventtime + 1
 
     def _getFrames(self, eventtime):      
-        chains = set()
+        chains_to_update = set()
         
         for effect in self.effects:
             if eventtime > effect.nextEventTime:
                 frame = effect.getFrame(eventtime)
-                if frame: 
-                    for i in range(effect.ledCount):
-                        s = effect.leds[i][1]
-                        chain =  effect.leds[i][0]
-                        getColorData =  effect.leds[i][2] 
-                        #TODO: blend instead overwrite
-                        chain.color_data[s:s+len(chain.color_order)] = getColorData(*frame[i*3:i*3+3])
-                    
-                    for chain in effect.ledChains:
-                        chains.add(chain)
+                for i in range(effect.ledCount):
+                    s = effect.leds[i][1]
+                    chain =  effect.leds[i][0]
+                    getColorData =  effect.leds[i][2] 
+                    #TODO: blend instead of overwrite
+                    chain.color_data[s:s+len(chain.color_order)] = getColorData(*frame[i*3:i*3+3])
+                    chains_to_update.add(chain)
                 
-        for chain in chains:
+        for chain in chains_to_update:
             chain.send_data()   
 
-        return min(self.effects, key=lambda x: x.nextEventTime).nextEventTime
-        
+        next_eventtime=min(self.effects, key=lambda x: x.nextEventTime).nextEventTime
+        next_eventtime=min(next_eventtime, eventtime + 1/10) # run at least with 10Hz
+
+        return next_eventtime
+
+
     def adcCallback(self, read_time, read_value):
-        self.analogValue = int(read_value * 1000) / 10.0                
+        self.analogValue = int(read_value * 1000) / 10.0
+    
+    def cmd_STOP_LED_EFFECTS(self, gcmd):
+        for effect in self.effects:
+            effect.set_enabled(False)
 
 def load_config(config):
     return ledFrameHandler(config)
@@ -242,7 +252,6 @@ class ledEffect:
             parms = [parameter.strip() for parameter in chain.split(' ')
                         if parameter.strip()]
 
-
             if parms:
                 ledChain     = self.printer.lookup_object(parms[0].replace(':',' '))
                 ledIndices   = ''.join(parms[1:]).strip('()').split(',')
@@ -254,30 +263,23 @@ class ledEffect:
                     clamp = (lambda x : 0.0 if x < 0.0 else 1.0 if x > 1.0 else x)
                     if ledChain.color_order == 'RGB':
                         getColorData = (lambda r, g, b:             
-                                        ( int(clamp(g) * 254.0), 
-                                          int(clamp(r) * 254.0), 
-                                          int(clamp(b) * 254.0)))    
+                                        ( int(clamp(g) * 255.0), 
+                                          int(clamp(r) * 255.0), 
+                                          int(clamp(b) * 255.0)))    
 
                     if ledChain.color_order == 'GRB':
                         getColorData = (lambda r, g, b:             
-                                        ( int(clamp(g) * 254.0), 
-                                          int(clamp(r) * 254.0), 
-                                          int(clamp(b) * 254.0))) 
-
-#TODO: Convert to real RGBW:
-                    if ledChain.color_order == 'RGBW':
-                        getColorData = (lambda r, g, b:             
-                                        ( int(clamp(r) * 254.0), 
-                                          int(clamp(g) * 254.0), 
-                                          int(clamp(b) * 254.0),
-                                          0))
+                                        ( int(clamp(g) * 255.0), 
+                                          int(clamp(r) * 255.0), 
+                                          int(clamp(b) * 255.0))) 
                     
-                    if ledChain.color_order == 'GRBW':
-                        getColorData = (lambda r, g, b:             
-                                        ( int(clamp(g) * 254.0), 
-                                          int(clamp(r) * 254.0), 
-                                          int(clamp(b) * 254.0),
-                                          0))
+                    if ledChain.color_order == 'RGBW' or ledChain.color_order == 'GRBW':
+                        getColorData = (lambda r, g, b: 
+                                        self._rgb2rgbw((
+                                          int(clamp(r) * 255.0), 
+                                          int(clamp(g) * 255.0), 
+                                          int(clamp(b) * 255.0)), 
+                                          ledChain.color_order ))
 
                 color_len = len(ledChain.color_order)
     
@@ -331,7 +333,25 @@ class ledEffect:
                                         ledCount      = len(self.leds),
                                         blendingMode  = parms[3]))
 
-        self.handler.addEffect(self)          
+        self.handler.addEffect(self)
+
+    #Todo: Make color temperature configurable in Neopixel config and maybe move conversion function to Neopixel module
+    def _rgb2rgbw(self, colors, color_order = "RGBW", color_temp_of_w = (255,180,107)):
+        clamp = (lambda x : 0 if x < 0 else 255 if x > 255 else int(x))
+
+        color_temp_factor = [x/255.0 for x in color_temp_of_w]
+
+        minWhite = min(colors[0] / color_temp_factor[0], colors[1] / color_temp_factor[1], colors[2] / color_temp_factor[2])
+
+        w_out = clamp( minWhite )
+        r_out = clamp( colors[0] - minWhite * color_temp_factor[0])
+        g_out = clamp( colors[1] - minWhite * color_temp_factor[1])
+        b_out = clamp( colors[2] - minWhite * color_temp_factor[2])
+
+        if color_order == "RGBW":
+            return (r_out, g_out, b_out, w_out)
+        elif color_order == "GRBW":
+            return (g_out, r_out, b_out, w_out)    
 
     def getFrame(self, eventtime):      
         
@@ -350,19 +370,19 @@ class ledEffect:
                 frame = [blend(t, b) for t, b in zip(layerFrame, frame)]
         return frame
 
-    def enable(self, state):
-        self.enable = state
-        if state:
+    def set_enabled(self, state):
+        self.enabled = state
+        if self.enabled:
             self.nextEventTime = 0
             
     def cmd_SET_LED_EFFECT(self, gcmd):
         if gcmd.get_int('STOP', 0) == 1:
-            self.enable(False)
+            self.set_enabled(False)
         else:            
-            self.enable(True)
+            self.set_enabled(True)
 
     def _handle_shutdown(self):
-        self.enable(self.runOnShutown)
+        self.set_enabled(self.runOnShutown)
 
 
     ######################################################################
