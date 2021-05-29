@@ -69,11 +69,12 @@ class ledFrameHandler:
         self.gcode   = self.printer.lookup_object('gcode')
         self.printer.load_object(config, "display_status")
         self.analogPins = []
-        self.heaters = []
+        self.heaters = {}
         self.effects = []
-        self.heaterCurrent   = 0
-        self.heaterTarget    = 0
-        self.heaterLast      = 0  
+        self.heaterCurrent   = {}
+        self.heaterTarget    = {}
+        self.heaterLast      = {}  
+        self.heaterTimer     = None
         self.printer.register_event_handler('klippy:ready', self._handle_ready)
         self.ledChains=[]
         self.gcode.register_command('STOP_LED_EFFECTS', 
@@ -104,7 +105,10 @@ class ledFrameHandler:
         if effect.heater:
             pheater = self.printer.lookup_object('heaters')
             self.heaters[effect.heater] = pheater.lookup_heater(effect.heater)
-
+            self.heaterLast[effect.heater] = 100
+            self.heaterCurrent[effect.heater] = 0
+            self.heaterTarget[effect.heater]  = 0
+            
             if not self.heaterTimer:
                 self.heaterTimer = self.reactor.register_timer(self._pollHeater, self.reactor.NOW) 
 
@@ -139,11 +143,15 @@ class ledFrameHandler:
 
 
     def _pollHeater(self, eventtime):
-        current, target = self.heater.get_temp(eventtime)
-        self.heaterCurrent = current
-        self.heaterTarget  = target
-        if target > 0:
-            self.heaterLast = target
+        for heater in self.heaters.iterkeys():
+            current, target = self.heaters[heater].get_temp(eventtime)
+            self.heaterCurrent[heater] = current
+            self.heaterTarget[heater]  = target
+            if target > 0:
+                self.heaterLast[heater] = target
+            
+                
+
         return eventtime + 1
 
     def _pollStepper(self, eventtime):
@@ -690,18 +698,18 @@ class ledEffect:
             self.frameCount = len(self.thisFrame)     
             
         def nextFrame(self, eventtime):
-            if self.handler.heaterTarget > 0.0 and self.handler.heaterCurrent > 0.0:
-                if self.handler.heaterCurrent <= self.handler.heaterTarget-5:
-                    s = int((self.handler.heaterCurrent / self.handler.heaterTarget) * 200)
+            if self.handler.handler.heaterTarget[self.handler.heater] > 0.0 and self.handler.handler.heaterCurrent[self.handler.heater] > 0.0:
+                if self.handler.handler.heaterCurrent[self.handler.heater] <= self.handler.handler.heaterTarget[self.handler.heater]-5:
+                    s = int((self.handler.handler.heaterCurrent[self.handler.heater] / self.handler.handler.heaterTarget[self.handler.heater]) * 200)
                     return self.thisFrame[s]
                 elif self.effectCutoff > 0:
                     return None
                 else:
                     return self.thisFrame[-1]
-            elif self.effectRate > 0 and self.handler.heaterCurrent > 0.0:
-                if self.handler.heaterCurrent >= self.effectRate:
-                    s = int(((self.handler.heaterCurrent - self.effectRate) 
-                            / self.handler.heaterLast) * 200)
+            elif self.effectRate > 0 and self.handler.handler.heaterCurrent[self.handler.heater] > 0.0:
+                if self.handler.handler.heaterCurrent[self.handler.heater] >= self.effectRate and self.handler.handler.heaterLast[self.handler.heater] > 0:
+                    s = int(((self.handler.handler.heaterCurrent[self.handler.heater] - self.effectRate) 
+                            / self.handler.handler.heaterLast[self.handler.heater]) * 200)
                     return self.thisFrame[s]
 
             return None
