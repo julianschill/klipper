@@ -3,18 +3,18 @@
 
 Addressable LEDs are beginning to supercede RGB LEDs for their
 flexibility and relative ease of use. With each individual element
-capable of displaying an entire spectrum of colors at very high speed, 
+capable of displaying an entire spectrum of colors at very high speed,
 they can be used to create a variety of lighting effects.
 
 <!-- DEMO GIF GOES HERE -->
 
 At this time, klipper supports most WS2812 compatible (neopixels)
-and APA102 compatible (dotstar) chips for LED Effects. 
+and APA102 compatible (dotstar) chips for LED Effects.
 
 ## Wiring WS2812 compatible (neopixel) LEDs
 
-Neopixel type LEDs require one digital IO pin and a supply of power. 
-Most are 5V but can be driven from a 3V source. Check manufacturer 
+Neopixel type LEDs require one digital IO pin and a supply of power.
+Most are 5V but can be driven from a 3V source. Check manufacturer
 specifications to ensure they will work with your board. Each individual
 emitter has 4 pins. VCC, GND, Din, and Dout. Neopixel strips typically
 have 3 solder pads or a connector with 3 pins and arrows indicating
@@ -24,22 +24,22 @@ should be attached to an available digital IO pin on the MCU board.
 The VCC connection is attached to a supply voltages that is compatible
 with the LED strip. Neopixels will typically use 60mA of current per
 emitter at full brightness so depending on the power capabilities of
-your printer board, it is recommended that they be powered from a 
+your printer board, it is recommended that they be powered from a
 separate power source. It is important that a GND wire be run from
 the neopixel chain back to the MCU board in addition to the GND to
 the power source. This will ensure the board can communicate with
-the strips. 
+the strips.
 
-At the present time, Klipper only supports 18 discrete emitters per 
-IO pin. It is possible to wire two strips to the same data pin and 
-have them show the same colors. It is also possible to specify 
-multiple LED chains on different IO pins in the LED Effects 
+At the present time, Klipper only supports 18 discrete emitters per
+IO pin. It is possible to wire two strips to the same data pin and
+have them show the same colors. It is also possible to specify
+multiple LED chains on different IO pins in the LED Effects
 configuration settings.
 
 ## Wiring APA102 compatible (dotstar) LEDs
 
 APA102 dotstar LEDs are similar to the neopixel LEDs with the exception
-that dotstar uses one-way SPI for communication. This requires the 
+that dotstar uses one-way SPI for communication. This requires the
 addition of a clock signal for the emitters. Multiple strips should be
 able to share the same clock pin but they each require their own
 data line.
@@ -47,7 +47,7 @@ data line.
 # Configuring the strips
 
 In your config file, each strip or chain connected to an IO pin must
-have a definition. Following the example in [config/example-extras.cfg](example-extras.cfg) 
+have a definition. Following the example in [config/example-extras.cfg](example-extras.cfg)
 each strips data pin (and clock pin if applicable) is defined along
 with the number of LEDs in the chain. The LED Effect instances are
 capable of using multiple strips of different types and color orders
@@ -55,24 +55,24 @@ concurrently, but each strip must first be defined by its type.
 
 ```
 [neopixel panel_ring]
-pin:                     ar6 
+pin:                     ar6
 chain_count:             16
 ```
 
 # Configuring the effects
 
-Effects are, in a more abstract sense, a _state_ that the strips 
+Effects are, in a more abstract sense, a _state_ that the strips
 exist in. Effects can be comprised of 1 led or 100. There can be
 one effect layer or 10. It is all arbitrary and extensible. This
-means the only limit to how many layers and leds can be run 
+means the only limit to how many layers and leds can be run
 concurrently is how much processing power the host OS is capable
-of handling. During initial testing, upwards of 100 LEDs and 12 
+of handling. During initial testing, upwards of 100 LEDs and 12
 effect layers were run concurrently on a Raspberry Pi 4 at 24 FPS.
 
 ## Basic layer definition
 
 For our example printer, there is one neopixel ring with 16 leds
-that is situated on the front panel, and a short segment of 
+that is situated on the front panel, and a short segment of
 neopixel LEDs next to the hot end for illuminating the print.
 
 There are also 5 dotstar LEDs located underneath the bed.
@@ -80,16 +80,16 @@ Pin numbers listed here are completely made-up.
 
 ```
 [neopixel panel_ring]
-pin:                     ar6 
+pin:                     ar6
 chain_count:             16
- 
-[neopixel tool_lights] 
-pin:                     ar15 
+
+[neopixel tool_lights]
+pin:                     ar15
 chain_count:             6
- 
-[neopixel bed_lights] 
-data_pin:                ar21 
-clock_pin                ar22 
+
+[neopixel bed_lights]
+data_pin:                ar21
+clock_pin                ar22
 chain_count:             5
 ```
 
@@ -100,8 +100,8 @@ printer comes online and we want the brightness to _breathe_ in and out.
 [led_effect panel_idle]
 autostart:              true
 frame_rate:             24
-leds:                               
-    neopixel:panel_ring                       
+leds:
+    neopixel:panel_ring
 layers:
     breathing  .5 1 top [(.5,.5,1)]
 ```
@@ -123,7 +123,7 @@ analog_pin
 
 stepper
 
-## Defining LEDs 
+## Defining LEDs
 
 the `leds:` section is a list of neopixel or dotstar strips that will
 make up the effect. Both types can be used for the same effect. Each
@@ -131,11 +131,11 @@ strip is defined on a separate line and indented beneath the `leds:`
 section.
 
 ```
-leds:                               
-    neopixel:panel_ring  
+leds:
+    neopixel:panel_ring
     neopixel:tool_lights
     dotstar:bed_lights
-``` 
+```
 
 Additionally, one may decide to only have certain LEDs displaying the
 effect. This is accomplished by providing the index of the LEDs to be
@@ -146,12 +146,12 @@ As well, if for some reason you needed to, the same strip can be used
 twice in an effect with different emitters being specified.
 
 ```
-leds:                               
-    neopixel:tool_lights 
-    neopixel:panel_ring  (1-7) 
-    neopixel:panel_ring  (9-16)   
+leds:
+    neopixel:tool_lights
+    neopixel:panel_ring  (1-7)
+    neopixel:panel_ring  (9-16)
     dotstar:bed_lights   (1,3,5)
-``` 
+```
 
 ## Defining Effect Layers
 Effects are generated as frames. Each frame contains the number of pixels
@@ -163,9 +163,9 @@ the next to generate the effect. Blending is cumulative and how colors are
 blended is defined by the blending mode of the top layer.
 Each effect layer is listed on its own line and each has its own settings.
 
-Most effect layers such as breathing and gradient are pre-rendered when 
+Most effect layers such as breathing and gradient are pre-rendered when
 Klipper starts in order to save on computing them later. Others such as
-Fire and Twinkle are rendered on demand. 
+Fire and Twinkle are rendered on demand.
 
 Each layer is defined with the following parameters
  * Layer name
@@ -187,9 +187,9 @@ Some Sample Palettes:
     Rainbow    (1.0, 0.0, 0.0),(0.0, 1.0, 0.0),(0.0, 0.0, 1.0)
     Fire       (0.0, 0.0, 0.0),(1.0, 0.0, 0.0),(1.0, 1.0, 0.0),(1.0, 1.0, 1.0)
     Blue Comet (0.8, 1.0, 1.0),(0.0, 0.8, 1.0),(0.0, 0.0, 1.0)
-    
+
 ```
-layers:            
+layers:
    breathing  .5 screen (0,.1,1), (0,1,.5), (0, 1,1), (0,.1,.5)
    static     1  bottom (1,.1,0), (1,.1,0), (1,.1,0), (1,1,0)
 ```
@@ -208,7 +208,7 @@ difference in hue.
     Cutoff:       0   Not used but must be provided
     Palette:          Colors are cycled in order
 
-Colors fade in and out. If a palette of multiple colors is provided, it will 
+Colors fade in and out. If a palette of multiple colors is provided, it will
 cycle through those colors in the order they are specified in the palette.
 The effect speed parameter controls how long it takes to "breathe" one time.
 
@@ -217,15 +217,15 @@ The effect speed parameter controls how long it takes to "breathe" one time.
     Cutoff:       0   Not used but must be provided
     Palette:          Colors are cycled in order
 
-LEDs are turned fully on and fully off based on the effect speed. If a palette 
-of multiple colors is provided, it will cycle through those colors in order. 
+LEDs are turned fully on and fully off based on the effect speed. If a palette
+of multiple colors is provided, it will cycle through those colors in order.
 
 #### Strobe
     Effect Rate:  1   Number of times per second to strobe
     Cutoff:       1.5 Determines decay rate. A higher number yields quicker decay
     Palette:          Colors are cycled in order
 
-LEDs are turned fully on and then faded out over time with a decay. If a palette 
+LEDs are turned fully on and then faded out over time with a decay. If a palette
 of multiple colors is provided, it will cycle through those colors in order. The
 effect rate controls how many times per second the lights will strobe. The cutoff
 parameter controls the decay rate. A good decay rate is 1.5.
@@ -246,13 +246,13 @@ of the strip. The effect rate parameter controls the speed at which the colors
 are cycled through. A negative value for the effect rate changes the direction
 the gradient cycles (right to left vs left to right)
 
-#### Comet 
+#### Comet
     Effect Rate:  1   How fast the comet moves, negative values change direction
     Cutoff:       1   Length of tail (somewhat arbitrary)
     Palette:          Color of "head" and gradient of "tail"
 A light moves through the LEDs with a decay trail. Direction can be controlled
-by using a negative effect rate value. The palette colors determine the color 
-of the comet and the tail. The first color of the palette defines the color of 
+by using a negative effect rate value. The palette colors determine the color
+of the comet and the tail. The first color of the palette defines the color of
 the "head" of the comet and the remaining colors are blended into the "tail"
 
 #### Chase
@@ -271,9 +271,9 @@ turned on and set to a target temperature, the LEDs will cycle through the gradi
 colors until the target temperature is met. Once it has been met, the last color
 of the gradient is used and the effect is essentially a static color until the.
 Heater state changes. If the cutoff parameter is supplied, the effect will be
-disabled once the targe temperature is met. If the heater is turned off, 
-the colors will follow this pattern in reverse until the temperature falls 
-below the minimum temperature specified in the config. This can be used to 
+disabled once the targe temperature is met. If the heater is turned off,
+the colors will follow this pattern in reverse until the temperature falls
+below the minimum temperature specified in the config. This can be used to
 indicate the hotend or bed is in a safe state to touch.
 
 #### Fire
@@ -281,8 +281,8 @@ indicate the hotend or bed is in a safe state to touch.
     Cutoff:       40  Rate of "cooling"
     Palette:          Color values to blend from "Cold" to "Hot"
 The FastLED library for Arduino has a sample sketch called Fire2012WithPalette
-included with it. This effect is a port of that sketch. It simulates a flame by 
-"sparking" an LED. The "heat" from that LED travels down the length of the LEDs 
+included with it. This effect is a port of that sketch. It simulates a flame by
+"sparking" an LED. The "heat" from that LED travels down the length of the LEDs
 where it gradually cools. A higher rate of sparking causes a greater amount
 of heat to accumulate at the base of the strip resulting a more intense flame.
 Changing the rate of cooling results in longer or shorter overall flames.
@@ -334,15 +334,15 @@ layer reports print progress.
 If you have ever used image editing software you may be familiar with
 color blending between image layers. Several common color blending
 techniques have been added to blend LEDS layers together. Layers defined
-in the configuration are ordered top to bottom. 
+in the configuration are ordered top to bottom.
 
 If there are 3 layers defined, the bottom layer is first blended with the
-middle layer. The resultant layer is then blended with the top. The bottom 
+middle layer. The resultant layer is then blended with the top. The bottom
 layer will never be blended with anything even if a blending mode is specified.
 
 Layer blending is always evaluated from the bottom up.
 
-Since values cannot exceed 100% brightness and 0% darkness, they are clamped 
+Since values cannot exceed 100% brightness and 0% darkness, they are clamped
 to this range as a floating point number ( 0.0 - 1.0 )
 
 #### bottom
@@ -351,16 +351,16 @@ No blending is done, the value from the color channel of the bottom layer is use
 #### top
 No blending is done, the value from the color channel of the top layer is used.
 
-#### add 
+#### add
 ```
     ( t + b )
 ```
 Color channels (Red, Green, and Blue) are added to one another. This results
 in channels becoming brighter.
 
-#### subtract 
+#### subtract
 ```
-    ( t - b ) 
+    ( t - b )
 ```
 The the bottom layer is subtracted from the top layer. This results in darkening
 similar colors.
@@ -406,7 +406,7 @@ The brigther of the color channels is used
 ```
     ( t if t < b else b )
 ```
-The opposite of lighten, the darker of color channels is used 
+The opposite of lighten, the darker of color channels is used
 
 #### overlay
 ```
@@ -426,11 +426,11 @@ enters a shutdown state.
 ```
 [led_effect critical_error]
 leds:
-    neopixel:tool_lights      
-    neopixel:bed_lights                     
-layers: 
+    neopixel:tool_lights
+    neopixel:bed_lights
+layers:
     strobe         1  1.5   add        (1.0,  1.0, 1.0)
-    breathing      2  0     difference (0.95, 0.0, 0.0)  
+    breathing      2  0     difference (0.95, 0.0, 0.0)
     static         1  0     top        (1.0,  0.0, 0.0)
 autostart:                             false
 frame_rate:                            24
@@ -440,7 +440,7 @@ run_on_error:                          true
 ## Bed Idle with Temperature
 ```
 [led_effect bed_effects]
-leds:                               
+leds:
     neopixel:bed_lights
 autostart:                          true
 frame_rate:                         24
@@ -461,11 +461,11 @@ analog pin is on full output and when  it is turned up it is on
 minimum output. This way, when the potentiometer is "down", the
 color (1.0, 1.0, 1.0) (Full white) is being subtracted from the
 colors of the layer, resulting in (0.0, 0.0, 0.0) (Full Black).
-The effect rate and cutoff would need to be tuned to the specific 
+The effect rate and cutoff would need to be tuned to the specific
 potentiometer and board combination.
 ```
 [led_effect bed_effects]
-leds:                               
+leds:
     neopixel:bed_lights
 autostart:                          true
 frame_rate:                         24
@@ -482,7 +482,7 @@ a dark blue background
 
 ```
 [led_effect progress_bar]
-leds:                               
+leds:
     neopixel:progress_lights
 autostart:                          true
 frame_rate:                         24
@@ -496,9 +496,9 @@ layers:
 
 ## My LEDs are flickering randomly
 
-This is usuall due to some sort of signal issue. Most addressable 
+This is usuall due to some sort of signal issue. Most addressable
 LEDS have a specific protocol they use for communication. It typically
-involves sending bits of data at a specific interval followed by a 
+involves sending bits of data at a specific interval followed by a
 reset latch to signal them to light up. They will stay the last color
 they were set until told to do something different.
 
@@ -511,11 +511,11 @@ regular intervals determined by the effect frame rate. So 10 frames per
 second would result in 10 color updates to the LEDs per second.
 
 The data lines are susceptible to electromagnetic interference from other
-electronics on the printer. When this interference is present, it can 
-result in malformed data going to the LEDs. 
+electronics on the printer. When this interference is present, it can
+result in malformed data going to the LEDs.
 
 To mitigate this, one can try insulating or isolating the data line from
-other wires. Try to keep the data lines as short as possible. This is 
+other wires. Try to keep the data lines as short as possible. This is
 especially problematic for 32 bit boards which typically output the
 data signal at 3.3V.
 
@@ -546,7 +546,7 @@ order.
 ``color_order_GRB:                    true``
 
 If you are unsure of the color order of your LEDs and want to test this,
-you can comment out or disable all of the effects you have configured 
+you can comment out or disable all of the effects you have configured
 and use a gcode command to set the color of the led strips directly.
 
 ``SET_LED LED=<config_name> RED=1 GREEN=0 BLUE=0 TRANSMIT=1``

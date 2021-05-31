@@ -24,12 +24,12 @@ class PrinterNeoPixel:
         self.color_order = config.getchoice("color_order", formats, "GRB")
         elem_size = len(self.color_order)
 
-        self.bitMaxTime = config.getfloat('bit_max_time', 
+        self.bitMaxTime = config.getfloat('bit_max_time',
                                            minval   =2.0,
                                            maxval   =8.0,
                                            default  =4.0) / 1000000.0
 
-        self.resetMinTime = config.getfloat('reset_min_time', 
+        self.resetMinTime = config.getfloat('reset_min_time',
                                            minval   =30.0,
                                            maxval   =100.0,
                                            default  =60.0) / 1000000.0

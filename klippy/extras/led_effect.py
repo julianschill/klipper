@@ -1,4 +1,4 @@
-# Support for addressable LED visual effects 
+# Support for addressable LED visual effects
 # using neopixel and dotstar LEDs
 #
 # Copyright (C) 2020  Paul McGowan <mental405@gmail.com>
@@ -41,11 +41,11 @@ class colorArray(list):
         if isinstance(a, int):
             super(colorArray, self).__setitem__(a*3  , v[0])
             super(colorArray, self).__setitem__(a*3+1, v[1])
-            super(colorArray, self).__setitem__(a*3+2, v[2])   
+            super(colorArray, self).__setitem__(a*3+2, v[2])
     def __len__(self):
         return super(colorArray, self).__len__() / 3
     def reverse(self):
-        self[:] = [c for cl in range(len(self)-1,-1, -1) 
+        self[:] = [c for cl in range(len(self)-1,-1, -1)
                         for c in self[cl]]
     def shift(self, shift=1, direction=1):
         if direction:
@@ -73,11 +73,11 @@ class ledFrameHandler:
         self.effects = []
         self.heaterCurrent   = {}
         self.heaterTarget    = {}
-        self.heaterLast      = {}  
+        self.heaterLast      = {}
         self.heaterTimer     = None
         self.printer.register_event_handler('klippy:ready', self._handle_ready)
         self.ledChains=[]
-        self.gcode.register_command('STOP_LED_EFFECTS', 
+        self.gcode.register_command('STOP_LED_EFFECTS',
                                          self.cmd_STOP_LED_EFFECTS,
                                          desc=self.cmd_STOP_LED_EFFECTS_help)
 
@@ -88,17 +88,17 @@ class ledFrameHandler:
         self.printer.register_event_handler('klippy:shutdown', self._handle_shutdown)
         self.printProgress = 0
         self.displayStatus = self.printer.lookup_object('display_status')
-        self.progressTimer = self.reactor.register_timer(self._pollProgress, self.reactor.NOW) 
+        self.progressTimer = self.reactor.register_timer(self._pollProgress, self.reactor.NOW)
         self.frameTimer    = self.reactor.register_timer(self._getFrames, self.reactor.NOW)
-        
+
     def _handle_shutdown(self):
         for effect in self.effects:
             if not effect.run_on_error:
                 for chain in self.ledChains:
                     chain.color_data = [] * (chain.chain_count * 3)
                     chain.send_data()
-                        
-        pass        
+
+        pass
 
     def addEffect(self, effect):
 
@@ -108,28 +108,28 @@ class ledFrameHandler:
             self.heaterLast[effect.heater] = 100
             self.heaterCurrent[effect.heater] = 0
             self.heaterTarget[effect.heater]  = 0
-            
-            if not self.heaterTimer:
-                self.heaterTimer = self.reactor.register_timer(self._pollHeater, self.reactor.NOW) 
 
-        if effect.stepper:                    
+            if not self.heaterTimer:
+                self.heaterTimer = self.reactor.register_timer(self._pollHeater, self.reactor.NOW)
+
+        if effect.stepper:
             self.stepperPosition = 0
             self.toolhead = self.printer.lookup_object('toolhead')
             kin = self.toolhead.get_kinematics()
 
             for r in kin.rails:
-                steppers = r.get_steppers() 
+                steppers = r.get_steppers()
 
                 for s in steppers:
                     if s.get_name() == self.stepper:
                         axis = s.get_name(short=True)
                         if axis == 'x': self.stepperAxis = 0
                         if axis == 'y': self.stepperAxis = 1
-                        if axis == 'z': self.stepperAxis = 2                   
+                        if axis == 'z': self.stepperAxis = 2
                         self.stepperRange = r.get_range()
                         self.getAxisPosition = kin.calc_tag_position
-                        self.stepperTimer = self.reactor.register_timer(self._pollStepper, 
-                                                self.reactor.NOW) 
+                        self.stepperTimer = self.reactor.register_timer(self._pollStepper,
+                                                self.reactor.NOW)
 
         if effect.analogPin:
             ppins = self.printer.lookup_object('pins')
@@ -149,15 +149,15 @@ class ledFrameHandler:
             self.heaterTarget[heater]  = target
             if target > 0:
                 self.heaterLast[heater] = target
-            
-                
+
+
 
         return eventtime + 1
 
     def _pollStepper(self, eventtime):
         p = self.getAxisPosition()[self.stepperAxis]
         if p >= self.stepperRange[0] and p <= self.stepperRange[1]:
-            self.stepperPosition = int((self._clamp((p / (self.stepperRange[1] - 
+            self.stepperPosition = int((self._clamp((p / (self.stepperRange[1] -
                                         self.stepperRange[0]))) * 100) - 1)
         return eventtime + .5
 
@@ -167,35 +167,32 @@ class ledFrameHandler:
             self.printProgress = int(p * 100)
         return eventtime + 1
 
-    def _getFrames(self, eventtime):      
+    def _getFrames(self, eventtime):
         chains_to_update = set()
-        
+
         for effect in self.effects:
             if eventtime > effect.nextEventTime:
                 frame = effect.getFrame(eventtime)
                 for i in range(effect.ledCount):
                     s = effect.leds[i][1]
                     chain =  effect.leds[i][0]
-                    getColorData =  effect.leds[i][2] 
+                    getColorData =  effect.leds[i][2]
                     #TODO: blend instead of overwrite
-                    with chain.mutex:
-                        chain.color_data[s:s+len(chain.color_order)] = getColorData(*frame[i*3:i*3+3])
+                    chain.color_data[s:s+len(chain.color_order)] = getColorData(*frame[i*3:i*3+3])
                     chains_to_update.add(chain)
-                
+
         for chain in chains_to_update:
-            with chain.mutex:
-                chain.send_data()   
+            chain.send_data()
 
         next_eventtime=min(self.effects, key=lambda x: x.nextEventTime).nextEventTime
         next_eventtime=min(next_eventtime, eventtime + 0.1) # run at least with 10Hz
-        next_eventtime=max(next_eventtime, eventtime + 0.01) # run with maximum with 100Hz
 
         return next_eventtime
 
 
     def adcCallback(self, read_time, read_value):
         self.analogValue = int(read_value * 1000) / 10.0
-    
+
     def cmd_STOP_LED_EFFECTS(self, gcmd):
         for effect in self.effects:
             effect.set_enabled(False)
@@ -215,7 +212,7 @@ class ledEffect:
         self.handler      = self.printer.load_object(config, 'led_effect')
         self.frameRate    = 1.0 / config.getfloat('frame_rate', default=24, minval=1, maxval=60)
         self.enabled      = False
-        self.iteration    = 0        
+        self.iteration    = 0
         self.layers       = []
 
         #Basic functions for layering colors. t=top and b=bottom color
@@ -235,7 +232,7 @@ class ledEffect:
            }
 
         self.name         = config.get_name().split()[1]
-        
+
         self.autoStart    = config.getboolean('autostart', False)
         self.runOnShutown = config.getboolean('run_on_error', False)
         self.heater       = config.get('heater', None)
@@ -267,33 +264,33 @@ class ledEffect:
                 ledChain     = self.printer.lookup_object(parms[0].replace(':',' '))
                 ledIndices   = ''.join(parms[1:]).strip('()').split(',')
 
-                #Add a call for each chain that orders the colors correctly 
+                #Add a call for each chain that orders the colors correctly
                 #and clamps #values to between 0 and 1
-    
+
                 if hasattr(ledChain, 'color_order'):
                     clamp = (lambda x : 0.0 if x < 0.0 else 1.0 if x > 1.0 else x)
                     if ledChain.color_order == 'RGB':
-                        getColorData = (lambda r, g, b:             
-                                        ( int(clamp(g) * 255.0), 
-                                          int(clamp(r) * 255.0), 
-                                          int(clamp(b) * 255.0)))    
+                        getColorData = (lambda r, g, b:
+                                        ( int(clamp(g) * 255.0),
+                                          int(clamp(r) * 255.0),
+                                          int(clamp(b) * 255.0)))
 
                     if ledChain.color_order == 'GRB':
-                        getColorData = (lambda r, g, b:             
-                                        ( int(clamp(g) * 255.0), 
-                                          int(clamp(r) * 255.0), 
-                                          int(clamp(b) * 255.0))) 
-                    
+                        getColorData = (lambda r, g, b:
+                                        ( int(clamp(g) * 255.0),
+                                          int(clamp(r) * 255.0),
+                                          int(clamp(b) * 255.0)))
+
                     if ledChain.color_order == 'RGBW' or ledChain.color_order == 'GRBW':
-                        getColorData = (lambda r, g, b: 
+                        getColorData = (lambda r, g, b:
                                         self._rgb2rgbw((
-                                          int(clamp(r) * 255.0), 
-                                          int(clamp(g) * 255.0), 
-                                          int(clamp(b) * 255.0)), 
+                                          int(clamp(r) * 255.0),
+                                          int(clamp(g) * 255.0),
+                                          int(clamp(b) * 255.0)),
                                           ledChain.color_order ))
 
                 color_len = len(ledChain.color_order)
-    
+
                 #Add each discrete chain to the collection
                 if ledChain not in self.ledChains:
                     self.ledChains.append(ledChain)
@@ -310,19 +307,19 @@ class ledEffect:
                     else:
                         for i in range(ledChain.chain_count):
                             self.leds.append([ledChain, int(i) * color_len, getColorData])
-  
+
         self.ledCount = len(self.leds)
 
         #enumerate all effects from the subclasses of _layerBase...
         availableLayers   = {str(c).rpartition('.layer')[2].replace("'>", "").lower() : c
                                    for c in self._layerBase.__subclasses__()
-                                   if str(c).startswith("<class")}  
+                                   if str(c).startswith("<class")}
 
         st = (lambda x : x.strip(('( )')))
 
-        for layer in [line for line in self.configLayers.split('\n') if line.strip()]: 
+        for layer in [line for line in self.configLayers.split('\n') if line.strip()]:
 
-            parms = [st(parameter) for parameter in layer.split(' ') if st(parameter)] 
+            parms = [st(parameter) for parameter in layer.split(' ') if st(parameter)]
 
             if not parms[0] in availableLayers:
                 raise self.printer.config_error("LED Effect '%s' in section '%s' is not a valid effect layer" % (
@@ -337,9 +334,9 @@ class ledEffect:
             palette = [float(st(c)) for t in parms[4:] for c in t.split(',') if st(c)]
 
             self.layers.insert(0, layer(handler       = self,
-                                        effectRate    = float(parms[1]),  
-                                        effectCutoff  = float(parms[2]),  
-                                        paletteColors = palette,    
+                                        effectRate    = float(parms[1]),
+                                        effectCutoff  = float(parms[2]),
+                                        paletteColors = palette,
                                         frameRate     = self.frameRate,
                                         ledCount      = len(self.leds),
                                         blendingMode  = parms[3]))
@@ -362,17 +359,17 @@ class ledEffect:
         if color_order == "RGBW":
             return (r_out, g_out, b_out, w_out)
         elif color_order == "GRBW":
-            return (g_out, r_out, b_out, w_out)    
+            return (g_out, r_out, b_out, w_out)
 
-    def getFrame(self, eventtime):      
-        
+    def getFrame(self, eventtime):
+
         frame = [0.0] * 3 * self.ledCount
         if not self.enabled:
             self.nextEventTime = 9999999999999999
             return frame
         else:
             self.nextEventTime = eventtime + self.frameRate
-        
+
         for layer in self.layers:
             layerFrame = layer.nextFrame(eventtime)
 
@@ -385,11 +382,11 @@ class ledEffect:
         self.enabled = state
         if self.enabled:
             self.nextEventTime = 0
-            
+
     def cmd_SET_LED_EFFECT(self, gcmd):
         if gcmd.get_int('STOP', 0) == 1:
             self.set_enabled(False)
-        else:            
+        else:
             self.set_enabled(True)
 
     def _handle_shutdown(self):
@@ -401,7 +398,7 @@ class ledEffect:
     ######################################################################
 
     # super class for effect animations. new animations should
-    # inherit this and return 1 frame of [r, g, b] * <number of leds> 
+    # inherit this and return 1 frame of [r, g, b] * <number of leds>
     # per call of nextFrame()
     class _layerBase(object):
         def __init__(self, **kwargs):
@@ -426,7 +423,7 @@ class ledEffect:
 
         def _decayTable(self, factor=1, rate=1):
 
-            frame = [] 
+            frame = []
 
             p = (1.0 / self.frameRate)
             r = (p/15.0)*factor
@@ -438,7 +435,7 @@ class ledEffect:
                     frame.append(b*(b>.01))
 
             return frame
-           
+
         def _gradient(self, palette, steps, reverse=False):
             #fill the number of steps with an even number of divisions
             palette = colorArray(palette[:])
@@ -460,9 +457,9 @@ class ledEffect:
             gradient  = palette[0]
 
             for i in range(1, len(palette)):
-                nextColor = palette[i]        
+                nextColor = palette[i]
                 for t in range(1, divs):
-                    z = [thisColor[j] + 
+                    z = [thisColor[j] +
                                 (float(t)/(divs-1))*(nextColor[j]-thisColor[j])
                                 for j in range(3)]
                     gradient += z
@@ -480,13 +477,13 @@ class ledEffect:
             super(ledEffect.layerStatic, self).__init__(**kwargs)
 
             self.paletteColors = colorArray(self.paletteColors)
-            
+
             gradientLength = (3 - int(self.ledCount) % 3) + int(self.ledCount)
             gradient   = colorArray(self._gradient(self.paletteColors, gradientLength))
-            
-            self.thisFrame.append(gradient[0:self.ledCount])   
+
+            self.thisFrame.append(gradient[0:self.ledCount])
             self.frameCount = len(self.thisFrame)
-            
+
     #Slow pulsing of color
     class layerBreathing(_layerBase):
         def __init__(self,  **kwargs):
@@ -495,9 +492,9 @@ class ledEffect:
             brightness = []
 
             p = (1.0 / self.frameRate) * (self.effectRate * 0.5)
-            o = int(p) 
+            o = int(p)
             f = 2 * pi
-        
+
             for x in range(0, int(p)):
                 if x < p:
                     v  = (exp(-cos((f / p) * (x+o)))-0.367879) / 2.35040238
@@ -509,26 +506,26 @@ class ledEffect:
                     v = 1.0
                 elif v < 0.0:
                     v = 0.0
-                
+
                 brightness.append(v)
 
-            for c in range(0, len(self.paletteColors)):  
-                color = self.paletteColors[c]  
-                  
-                for b in brightness:                   
+            for c in range(0, len(self.paletteColors)):
+                color = self.paletteColors[c]
+
+                for b in brightness:
                     self.thisFrame += [[b * i for i in color] * self.ledCount]
 
             self.frameCount = len(self.thisFrame)
 
     #Turns the entire strip on and off
-    class layerBlink(_layerBase):    
+    class layerBlink(_layerBase):
         def __init__(self, **kwargs):
             super(ledEffect.layerBlink, self).__init__(**kwargs)
 
             frameCount = int(( 1.0 / self.frameRate ) * self.effectRate)
 
-            for c in range(0, len(self.paletteColors)):  
-                color = self.paletteColors[c]  
+            for c in range(0, len(self.paletteColors)):
+                color = self.paletteColors[c]
                 self.thisFrame += [color * self.ledCount] * frameCount
                 self.thisFrame += [[0,0,0] * self.ledCount] * frameCount
 
@@ -548,9 +545,9 @@ class ledEffect:
         def nextFrame(self, eventtime):
 
             for i in range(0, self.ledCount):
-                
+
                 r = randint(0, self.colorCount)
-                color = self.paletteColors[r]       
+                color = self.paletteColors[r]
 
                 if randint(0, 255) > 254 - self.effectRate:
                     self.lastBrightness[i] = 0
@@ -561,13 +558,13 @@ class ledEffect:
                         self.lastBrightness[i] = -1
                         self.thisFrame[i] = [0.0, 0.0, 0.0]
                     else:
-                        x = self.lastBrightness[i] 
+                        x = self.lastBrightness[i]
                         self.lastBrightness[i] += 1
-                        self.thisFrame[i] = [self.decayTable[x] * l 
+                        self.thisFrame[i] = [self.decayTable[x] * l
                                                 for l in self.thisFrame[i]]
 
-            return self.thisFrame      
- 
+            return self.thisFrame
+
     #Blinking with decay
     class layerStrobe(_layerBase):
         def __init__(self, **kwargs):
@@ -575,7 +572,7 @@ class ledEffect:
 
             frameRate  = int(1.0 / self.frameRate)
             frameCount = int(frameRate * self.effectRate)
-            
+
             decayTable = self._decayTable(factor=1 / self.effectCutoff,
                                           rate=self.effectRate)
 
@@ -583,13 +580,13 @@ class ledEffect:
                 decayTable = decayTable[:frameRate]
             else:
                 decayTable += [0.0] * (self.frameRate - len(decayTable))
-                
-            for c in range(0, len(self.paletteColors)):  
-                color = self.paletteColors[c]  
-                  
-                for b in decayTable:                   
+
+            for c in range(0, len(self.paletteColors)):
+                color = self.paletteColors[c]
+
+                for b in decayTable:
                     self.thisFrame += [[b * i for i in color] * self.ledCount]
-            
+
             self.frameCount = len(self.thisFrame)
 
     #Lights move sequentially with decay
@@ -614,7 +611,7 @@ class ledEffect:
             decayTable = [c for b in zip(decayTable, decayTable, decayTable) for c in b]
 
             comet  = colorArray([a * b for a, b in zip(gradient,decayTable)])
-  
+
             comet.padRight([0.0,0.0,0.0], self.ledCount)
 
             if self.direction: comet.reverse()
@@ -625,9 +622,9 @@ class ledEffect:
 
                 for x in range(int((1/self.effectRate)-(self.effectRate <= 1))):
                     self.thisFrame.append(comet[0:self.ledCount])
-            
+
             self.frameCount = len(self.thisFrame)
-     
+
     #Lights move sequentially with decay
     class layerChase(_layerBase):
         def __init__(self,  **kwargs):
@@ -646,7 +643,7 @@ class ledEffect:
                                                                 len(decayTable)+1)
 
             decayTable = [c for b in zip(decayTable, decayTable, decayTable) for c in b]
-            gradient  = colorArray([a * b 
+            gradient  = colorArray([a * b
                             for a, b in zip(gradient,decayTable)])
 
             chase = gradient
@@ -671,35 +668,35 @@ class ledEffect:
             super(ledEffect.layerGradient, self).__init__(**kwargs)
 
             self.paletteColors = colorArray(self.paletteColors + self.paletteColors[0])
-            
+
             gradientLength = (3 - int(self.ledCount) % 3) + int(self.ledCount)
             gradient   = colorArray(self._gradient(self.paletteColors, gradientLength))
-      
+
             for i in range(len(gradient)):
                 gradient.shift(int(self.effectRate+(self.effectRate < 1)), self.direction)
                 self.thisFrame.append(gradient[0:self.ledCount])
 
                 for x in range(int((1/self.effectRate)-(self.effectRate <= 1))):
-                    self.thisFrame.append(gradient[0:self.ledCount])            
+                    self.thisFrame.append(gradient[0:self.ledCount])
 
             self.frameCount = len(self.thisFrame)
- 
+
     #Responds to heater temperature
     class layerHeater(_layerBase):
         def __init__(self,  **kwargs):
             super(ledEffect.layerHeater, self).__init__(**kwargs)
 
-            if len(self.paletteColors) == 1: 
+            if len(self.paletteColors) == 1:
                 self.paletteColors += self.paletteColors
 
             gradient   = colorArray(self._gradient(self.paletteColors[:-1], 200) +
                                     self.paletteColors[-1:])
-            
+
             for i in range(len(gradient)):
                 self.thisFrame.append(gradient[i] * self.ledCount)
-                
-            self.frameCount = len(self.thisFrame)     
-            
+
+            self.frameCount = len(self.thisFrame)
+
         def nextFrame(self, eventtime):
             if self.handler.handler.heaterTarget[self.handler.heater] > 0.0 and self.handler.handler.heaterCurrent[self.handler.heater] > 0.0:
                 if self.handler.handler.heaterCurrent[self.handler.heater] <= self.handler.handler.heaterTarget[self.handler.heater]-5:
@@ -711,7 +708,7 @@ class ledEffect:
                     return self.thisFrame[-1]
             elif self.effectRate > 0 and self.handler.handler.heaterCurrent[self.handler.heater] > 0.0:
                 if self.handler.handler.heaterCurrent[self.handler.heater] >= self.effectRate and self.handler.handler.heaterLast[self.handler.heater] > 0:
-                    s = int(((self.handler.handler.heaterCurrent[self.handler.heater] - self.effectRate) 
+                    s = int(((self.handler.handler.heaterCurrent[self.handler.heater] - self.effectRate)
                             / self.handler.handler.heaterLast[self.handler.heater]) * 200)
                     return self.thisFrame[s]
 
@@ -722,7 +719,7 @@ class ledEffect:
         def __init__(self,  **kwargs):
             super(ledEffect.layerAnalogPin, self).__init__(**kwargs)
 
-            if len(self.paletteColors) == 1: 
+            if len(self.paletteColors) == 1:
                 self.paletteColors = [0.0,0.0,0.0] + self.paletteColors
 
             gradient   = colorArray(self._gradient(self.paletteColors, 101))
@@ -730,13 +727,13 @@ class ledEffect:
             for i in range(len(gradient)):
                 self.thisFrame.append(gradient[i] * self.ledCount)
 
-        def nextFrame(self, eventtime):    
-            v = int(self.handler.analogValue * self.effectRate) 
+        def nextFrame(self, eventtime):
+            v = int(self.handler.analogValue * self.effectRate)
 
             if v > 100: v = 100
 
             if v > self.effectCutoff:
-                return self.thisFrame[v] 
+                return self.thisFrame[v]
             else:
                 return self.thisFrame[0]
 
@@ -750,25 +747,25 @@ class ledEffect:
 
             if self.effectCutoff < 0:
                 self.effectCutoff = self.ledCount
-           
+
             if self.effectRate == 0:
                 trailing = colorArray([0.0,0.0,0.0] * self.ledCount)
             else:
-                trailing = colorArray(self._gradient(self.paletteColors[1:], 
+                trailing = colorArray(self._gradient(self.paletteColors[1:],
                                                      self.effectRate, True))
                 trailing.padLeft([0.0,0.0,0.0], self.ledCount)
 
             if self.effectCutoff == 0:
                 leading = colorArray([0.0,0.0,0.0] * self.ledCount)
             else:
-                leading = colorArray(self._gradient(self.paletteColors[1:], 
+                leading = colorArray(self._gradient(self.paletteColors[1:],
                                                     self.effectCutoff, False))
                 leading.padRight([0.0,0.0,0.0], self.ledCount)
 
             gradient = colorArray(trailing + self.paletteColors[0] + leading)
             gradient.shift(len(trailing)-1, 0)
             frames = [gradient[:self.ledCount]]
-        
+
             for i in range(0, self.ledCount):
                 gradient.shift(1,1)
                 frames.append(gradient[:self.ledCount])
@@ -777,14 +774,14 @@ class ledEffect:
                 x = int((i / 101.0) * self.ledCount)
                 self.thisFrame.append(frames[x])
 
-            self.frameCount = len(self.thisFrame) 
+            self.frameCount = len(self.thisFrame)
 
         def nextFrame(self, eventtime):
             p = self.handler.stepperPosition
             return self.thisFrame[(p - 1) * (p > 0)]
 
-     #Shameless port of Fire2012 by Mark Kriegsman 
-  
+     #Shameless port of Fire2012 by Mark Kriegsman
+
     #Shamelessly appropriated from the Arduino FastLED example files
     #Fire2012.ino by Daniel Garcia
     class layerFire(_layerBase):
@@ -809,8 +806,8 @@ class ledEffect:
                 self.heatMap[h] -= (self.heatMap[h] - c >= 0 ) * c
 
             for i in range(self.ledCount - 1, 2, -1):
-                d = (self.heatMap[i - 1] + 
-                     self.heatMap[i - 2] + 
+                d = (self.heatMap[i - 1] +
+                     self.heatMap[i - 2] +
                      self.heatMap[i - 3] ) / 3
 
                 self.heatMap[i] = d * (d >= 0)
@@ -818,11 +815,11 @@ class ledEffect:
             if randint(0, 100) < self.effectRate:
                 h = randint(0, self.heatSource)
                 self.heatMap[h] += randint(90,100)
-                if self.heatMap[h] > 100: 
+                if self.heatMap[h] > 100:
                     self.heatMap[h] = 100
 
             for h in self.heatMap:
-                frame += self.gradient[int(h)] 
+                frame += self.gradient[int(h)]
 
             return frame
 
@@ -847,7 +844,7 @@ class ledEffect:
             heaterTarget  = self.handler.heaterTarget
             heaterCurrent = self.handler.heaterCurrent
             heaterLast    = self.handler.heaterLast
-            
+
             if heaterTarget > 0.0 and heaterCurrent > 0.0:
                 if heaterCurrent <= heaterTarget-5:
                     spark = int((heaterCurrent / heaterTarget) * 80)
@@ -859,11 +856,11 @@ class ledEffect:
                     brightness = 100
             elif self.effectRate > 0 and heaterCurrent > 0.0:
                 if heaterCurrent >= self.effectRate:
-                    spark = int(((heaterCurrent - self.effectRate) 
+                    spark = int(((heaterCurrent - self.effectRate)
                                       / heaterLast) * 80)
-                    brightness = int(((heaterCurrent - self.effectRate) 
+                    brightness = int(((heaterCurrent - self.effectRate)
                                       / heaterLast) * 100)
-                                      
+
             if spark > 0:
                 cooling = int((heaterCurrent / heaterTarget) * 20)
 
@@ -872,8 +869,8 @@ class ledEffect:
                     self.heatMap[h] -= (self.heatMap[h] - c >= 0 ) * c
 
                 for i in range(self.ledCount - 1, 2, -1):
-                    d = (self.heatMap[i - 1] + 
-                         self.heatMap[i - 2] + 
+                    d = (self.heatMap[i - 1] +
+                         self.heatMap[i - 2] +
                          self.heatMap[i - 3] ) / 3
 
                     self.heatMap[i] = d * (d >= 0)
@@ -881,11 +878,11 @@ class ledEffect:
                 if randint(0, 100) < spark:
                     h = randint(0, self.heatSource)
                     self.heatMap[h] += brightness
-                    if self.heatMap[h] > 100: 
+                    if self.heatMap[h] > 100:
                         self.heatMap[h] = 100
 
                 for h in self.heatMap:
-                    frame += self.gradient[int(h)] 
+                    frame += self.gradient[int(h)]
 
                 return frame
 
@@ -902,25 +899,25 @@ class ledEffect:
 
             if self.effectCutoff < 0:
                 self.effectCutoff = self.ledCount
-           
+
             if self.effectRate == 0:
                 trailing = colorArray([0.0,0.0,0.0] * self.ledCount)
             else:
-                trailing = colorArray(self._gradient(self.paletteColors[1:], 
+                trailing = colorArray(self._gradient(self.paletteColors[1:],
                                                      self.effectRate, True))
                 trailing.padLeft([0.0,0.0,0.0], self.ledCount)
 
             if self.effectCutoff == 0:
                 leading = colorArray([0.0,0.0,0.0] * self.ledCount)
             else:
-                leading = colorArray(self._gradient(self.paletteColors[1:], 
+                leading = colorArray(self._gradient(self.paletteColors[1:],
                                                     self.effectCutoff, False))
                 leading.padRight([0.0,0.0,0.0], self.ledCount)
 
             gradient = colorArray(trailing + self.paletteColors[0] + leading)
             gradient.shift(len(trailing)-1, 0)
             frames = [gradient[:self.ledCount]]
-        
+
             for i in range(0, self.ledCount):
                 gradient.shift(1,1)
                 frames.append(gradient[:self.ledCount])
@@ -929,7 +926,7 @@ class ledEffect:
                 x = int((i / 101.0) * self.ledCount)
                 self.thisFrame.append(frames[x])
 
-            self.frameCount = len(self.thisFrame) 
+            self.frameCount = len(self.thisFrame)
 
         def nextFrame(self, eventtime):
             p = self.handler.printProgress
@@ -937,4 +934,3 @@ class ledEffect:
 
 def load_config_prefix(config):
     return ledEffect(config)
-
