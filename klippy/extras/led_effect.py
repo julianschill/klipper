@@ -337,6 +337,7 @@ class ledEffect:
             palette = [float(st(c)) for t in parms[4:] for c in t.split(',') if st(c)]
 
             self.layers.insert(0, layer(handler       = self,
+                                        frameHandler  = self.handler,
                                         effectRate    = float(parms[1]),
                                         effectCutoff  = float(parms[2]),
                                         paletteColors = palette,
@@ -368,7 +369,7 @@ class ledEffect:
 
         frame = [0.0] * 3 * self.ledCount
         if not self.enabled:
-            self.nextEventTime = 9999999999999999
+            self.nextEventTime = self.handler.reactor.NEVER
             return frame
         else:
             self.nextEventTime = eventtime + self.frameRate
@@ -384,7 +385,7 @@ class ledEffect:
     def set_enabled(self, state):
         self.enabled = state
         if self.enabled:
-            self.nextEventTime = 0
+            self.nextEventTime = self.handler.reactor.NOW
 
     def cmd_SET_LED_EFFECT(self, gcmd):
         if gcmd.get_int('STOP', 0) == 1:
@@ -406,6 +407,7 @@ class ledEffect:
     class _layerBase(object):
         def __init__(self, **kwargs):
             self.handler         = kwargs['handler']
+            self.frameHandler    = kwargs['frameHandler']
             self.ledCount        = kwargs['ledCount']
             self.paletteColors   = colorArray(kwargs['paletteColors'])
             self.effectRate      = kwargs['effectRate']
@@ -701,18 +703,18 @@ class ledEffect:
             self.frameCount = len(self.thisFrame)
 
         def nextFrame(self, eventtime):
-            if self.handler.handler.heaterTarget[self.handler.heater] > 0.0 and self.handler.handler.heaterCurrent[self.handler.heater] > 0.0:
-                if self.handler.handler.heaterCurrent[self.handler.heater] <= self.handler.handler.heaterTarget[self.handler.heater]-5:
-                    s = int((self.handler.handler.heaterCurrent[self.handler.heater] / self.handler.handler.heaterTarget[self.handler.heater]) * 200)
+            if self.frameHandler.heaterTarget[self.handler.heater] > 0.0 and self.frameHandler.heaterCurrent[self.handler.heater] > 0.0:
+                if self.frameHandler.heaterCurrent[self.handler.heater] <= self.frameHandler.heaterTarget[self.handler.heater]-5:
+                    s = int((self.frameHandler.heaterCurrent[self.handler.heater] / self.frameHandler.heaterTarget[self.handler.heater]) * 200)
                     return self.thisFrame[s]
                 elif self.effectCutoff > 0:
                     return None
                 else:
                     return self.thisFrame[-1]
-            elif self.effectRate > 0 and self.handler.handler.heaterCurrent[self.handler.heater] > 0.0:
-                if self.handler.handler.heaterCurrent[self.handler.heater] >= self.effectRate and self.handler.handler.heaterLast[self.handler.heater] > 0:
-                    s = int(((self.handler.handler.heaterCurrent[self.handler.heater] - self.effectRate)
-                            / self.handler.handler.heaterLast[self.handler.heater]) * 200)
+            elif self.effectRate > 0 and self.frameHandler.heaterCurrent[self.handler.heater] > 0.0:
+                if self.frameHandler.heaterCurrent[self.handler.heater] >= self.effectRate and self.frameHandler.heaterLast[self.handler.heater] > 0:
+                    s = int(((self.frameHandler.heaterCurrent[self.handler.heater] - self.effectRate)
+                            / self.frameHandler.heaterLast[self.handler.heater]) * 200)
                     return self.thisFrame[s]
 
             return None
