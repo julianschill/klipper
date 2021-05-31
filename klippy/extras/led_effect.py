@@ -185,7 +185,8 @@ class ledFrameHandler:
             chain.send_data()   
 
         next_eventtime=min(self.effects, key=lambda x: x.nextEventTime).nextEventTime
-        next_eventtime=min(next_eventtime, eventtime + 1/10) # run at least with 10Hz
+        next_eventtime=min(next_eventtime, eventtime + 0.1) # run at least with 10Hz
+        next_eventtime=max(next_eventtime, eventtime + 0.01) # run with maximum with 100Hz
 
         return next_eventtime
 
