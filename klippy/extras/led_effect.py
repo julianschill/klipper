@@ -178,11 +178,13 @@ class ledFrameHandler:
                     chain =  effect.leds[i][0]
                     getColorData =  effect.leds[i][2] 
                     #TODO: blend instead of overwrite
-                    chain.color_data[s:s+len(chain.color_order)] = getColorData(*frame[i*3:i*3+3])
+                    with chain.mutex:
+                        chain.color_data[s:s+len(chain.color_order)] = getColorData(*frame[i*3:i*3+3])
                     chains_to_update.add(chain)
                 
         for chain in chains_to_update:
-            chain.send_data()   
+            with chain.mutex:
+                chain.send_data()   
 
         next_eventtime=min(self.effects, key=lambda x: x.nextEventTime).nextEventTime
         next_eventtime=min(next_eventtime, eventtime + 0.1) # run at least with 10Hz
