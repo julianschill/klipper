@@ -6,11 +6,7 @@
 import logging
 
 BACKGROUND_PRIORITY_CLOCK = 0x7fffffff00000000
-
-BIT_MAX_TIME=.000004
-RESET_MIN_TIME=.000050
-
-MAX_MCU_SIZE = 500  # Sanity check on LED chain length
+MAX_MCU_SIZE = 500
 
 class PrinterNeoPixel:
     def __init__(self, config):
@@ -27,6 +23,17 @@ class PrinterNeoPixel:
         formats = {v: v for v in ["RGB", "GRB", "RGBW", "GRBW"]}
         self.color_order = config.getchoice("color_order", formats, "GRB")
         elem_size = len(self.color_order)
+
+        self.bitMaxTime = config.getfloat('bit_max_time',
+                                           minval   =2.0,
+                                           maxval   =8.0,
+                                           default  =4.0) / 1000000.0
+
+        self.resetMinTime = config.getfloat('reset_min_time',
+                                           minval   =30.0,
+                                           maxval   =100.0,
+                                           default  =60.0) / 1000000.0
+
         self.chain_count = config.getint('chain_count', 1, minval=1,
                                          maxval=MAX_MCU_SIZE//elem_size)
         self.neopixel_update_cmd = self.neopixel_send_cmd = None
@@ -46,8 +53,8 @@ class PrinterNeoPixel:
         gcode.register_mux_command("SET_LED", "LED", name, self.cmd_SET_LED,
                                    desc=self.cmd_SET_LED_help)
     def build_config(self):
-        bmt = self.mcu.seconds_to_clock(BIT_MAX_TIME)
-        rmt = self.mcu.seconds_to_clock(RESET_MIN_TIME)
+        bmt = self.mcu.seconds_to_clock(self.bitMaxTime)
+        rmt = self.mcu.seconds_to_clock(self.resetMinTime)
         self.mcu.add_config_cmd("config_neopixel oid=%d pin=%s data_size=%d"
                                 " bit_max_ticks=%d reset_min_ticks=%d"
                                 % (self.oid, self.pin, len(self.color_data),
@@ -111,6 +118,7 @@ class PrinterNeoPixel:
         else:
             logging.info("Neopixel update did not succeed")
     cmd_SET_LED_help = "Set the color of an LED"
+
     def cmd_SET_LED(self, gcmd):
         # Parse parameters
         red = gcmd.get_float('RED', 0., minval=0., maxval=1.)
