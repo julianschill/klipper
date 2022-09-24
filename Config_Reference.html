@@ -1237,6 +1237,13 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#led_group" class="md-nav__link">
+    [led_group]
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3147,6 +3154,13 @@
           <li class="md-nav__item">
   <a href="#pca9632" class="md-nav__link">
     [pca9632]
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#led_group" class="md-nav__link">
+    [led_group]
   </a>
   
 </li>
@@ -6086,6 +6100,17 @@ clock_pin:
 #initial_BLUE: 0.0
 #initial_WHITE: 0.0
 #   See the &quot;led&quot; section for information on these parameters.
+</code></pre></div>
+
+<h3 id="led_group">[led_group]<a class="headerlink" href="#led_group" title="Permanent link">&para;</a></h3>
+<p>Groups LEDs together into LED groups, which then can be used like any LED 
+chain.</p>
+<div class="highlight"><pre><span></span><code>[led_group my_group]
+#leds:
+#   A list of LEDs to put in the group. Every chain in a new line with the chain
+#   name, optionally followed by the index range in brackets. Ranges can be 
+#   combined by separating them with a comma. Example: 
+#   neopixel:my_neopixel (2-4,6-7,10)
 </code></pre></div>
 
 <h2 id="additional-servos-buttons-and-other-pins">Additional servos, buttons, and other pins<a class="headerlink" href="#additional-servos-buttons-and-other-pins" title="Permanent link">&para;</a></h2>
