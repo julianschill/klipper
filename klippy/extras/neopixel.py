@@ -24,6 +24,7 @@ class PrinterNeoPixel:
         self.pin = pin_params['pin']
         self.mcu.register_config_callback(self.build_config)
         self.neopixel_update_cmd = self.neopixel_send_cmd = None
+        self.hw = config.getboolean("hardware", False)
         # Build color map
         chain_count = config.getint('chain_count', 1, minval=1)
         color_order = config.getlist("color_order", ["GRB"])
@@ -49,11 +50,23 @@ class PrinterNeoPixel:
     def build_config(self):
         bmt = self.mcu.seconds_to_clock(BIT_MAX_TIME)
         rmt = self.mcu.seconds_to_clock(RESET_MIN_TIME)
+        cmd_queue = self.mcu.alloc_command_queue()
+        if self.hw:
+            self.mcu.add_config_cmd(
+                "config_neopixel_hw oid=%d pin=%s data_size=%d"
+                " reset_min_ticks=%d" % (self.oid, self.pin,
+                                         len(self.color_data), rmt))
+            self.neopixel_update_cmd = self.mcu.lookup_command(
+                "neopixel_hw_update oid=%c pos=%hu data=%*s", cq=cmd_queue)
+            self.neopixel_send_cmd = self.mcu.lookup_query_command(
+                "neopixel_hw_send oid=%c",
+                "neopixel_hw_result oid=%c success=%c", oid=self.oid,
+                cq=cmd_queue)
+            return
         self.mcu.add_config_cmd("config_neopixel oid=%d pin=%s data_size=%d"
                                 " bit_max_ticks=%d reset_min_ticks=%d"
                                 % (self.oid, self.pin, len(self.color_data),
                                    bmt, rmt))
-        cmd_queue = self.mcu.alloc_command_queue()
         self.neopixel_update_cmd = self.mcu.lookup_command(
             "neopixel_update oid=%c pos=%hu data=%*s", cq=cmd_queue)
         self.neopixel_send_cmd = self.mcu.lookup_query_command(

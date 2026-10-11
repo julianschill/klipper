@@ -3508,6 +3508,10 @@ pin:
 #   containing the letters R, G, B, W with W optional). Alternatively,
 #   this may be a comma separated list of pixel orders - one for each
 #   LED in the chain. The default is GRB.
+#hardware: false
+#   Set to true to have the MCU drive this neopixel with dedicated
+#   internal hardware if one supports it. Setting it on an MCU without
+#   such support is an error. The default is false.
 #initial_RED: 0.0
 #initial_GREEN: 0.0
 #initial_BLUE: 0.0
