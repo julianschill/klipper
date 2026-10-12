@@ -52,6 +52,12 @@ class PrinterNeoPixel:
         rmt = self.mcu.seconds_to_clock(RESET_MIN_TIME)
         cmd_queue = self.mcu.alloc_command_queue()
         if self.hw:
+            if not self.mcu.try_lookup_command(
+                    "config_neopixel_hw oid=%c pin=%u data_size=%hu"
+                    " reset_min_ticks=%u"):
+                raise self.printer.config_error(
+                    "MCU %s does not support hardware neopixels"
+                    % (self.mcu.get_name(),))
             self.mcu.add_config_cmd(
                 "config_neopixel_hw oid=%d pin=%s data_size=%d"
                 " reset_min_ticks=%d" % (self.oid, self.pin,

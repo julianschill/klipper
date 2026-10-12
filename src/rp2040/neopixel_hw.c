@@ -8,7 +8,7 @@
 #include "autoconf.h" // CONFIG_CLOCK_FREQ
 #include "board/irq.h" // irq_poll
 #include "board/misc.h" // timer_read_time, timer_is_before
-#include "basecmd.h" // oid_alloc
+#include "basecmd.h" // oid_alloc, oid_next, oid_lookup
 #include "command.h" // DECL_COMMAND
 #include "sched.h" // sched_shutdown
 #include "hardware/regs/dma.h" // DMA_CH0_CTRL_TRIG_*
@@ -38,6 +38,12 @@ static const uint16_t neopixel_program[4] = {
 #define NEOPIXEL_CYCLES_PER_BIT 10
 #define NEOPIXEL_BIT_NS         1500
 
+// A bit of NEOPIXEL_BIT_NS in timer ticks, a compile-time constant so
+// no run-time divide code is needed to scale frame lengths
+#define NEOPIXEL_TICKS_PER_BIT \
+        ((uint32_t)((uint64_t)NEOPIXEL_BIT_NS * CONFIG_CLOCK_FREQ \
+         / 1000000000ull))
+
 struct neopixel_hw_s {
     uint32_t pin;
     uint8_t sm;               // (pio_index << 2) | sm slot, also DMA channel
@@ -46,21 +52,26 @@ struct neopixel_hw_s {
     uint8_t data[0];          // framebuffer, then a copy of it for DMA
 };
 
-// can.c hands all four state machines of the PIO0 block to the can2040
-// library, so mark them claimed here when CAN is enabled
-static uint32_t sm_claimed = (CONFIG_CANSERIAL || CONFIG_USBCANBUS) ? 0xfu : 0;
+void command_config_neopixel_hw(uint32_t *args);
 
-// Claim a free state machine, returned as (pio_index << 2) | sm. The
-// number doubles as the DMA channel feeding that machine, and distinct
-// machines give distinct channels. Either PIO block can drive any pin,
-// so take a machine from whichever block has one left.
+// can.c hands all four state machines of the PIO0 block to the can2040
+// library, so start with them claimed when CAN is enabled. The remaining
+// machines and DMA channels are allocated from configured hardware LEDs
+// rather than remembered statically, so config reprocessing cannot leave
+// old claims behind.
 static uint8_t
-claim_sm(void)
+claim_sm(struct neopixel_hw_s *n)
 {
+    uint32_t used = (CONFIG_CANSERIAL || CONFIG_USBCANBUS) ? 0xfu : 0;
+    uint8_t oid;
+    struct neopixel_hw_s *o;
+    foreach_oid(oid, o, command_config_neopixel_hw) {
+        if (o != n)
+            used |= 1u << o->sm;
+    }
     for (uint8_t bit = 0; bit < 8; bit++) {
-        if (sm_claimed & (1u << bit))
+        if (used & (1u << bit))
             continue;
-        sm_claimed |= 1u << bit;
         return bit;
     }
     shutdown("No free PIO state machine");
@@ -155,10 +166,9 @@ hw_send(struct neopixel_hw_s *n)
 
     // Bytes are fed in faster than the machine consumes them, so allow a
     // bit of slack before the last one runs out
-    uint32_t frame_ns = (uint32_t)((n->data_size + 1) * 8 * NEOPIXEL_BIT_NS)
-                        + NEOPIXEL_BIT_NS;
     n->frame_end = timer_read_time() + (uint32_t)(
-        (uint64_t)frame_ns * CONFIG_CLOCK_FREQ / 1000000000ull);
+        (n->data_size + 1) * 8 * NEOPIXEL_TICKS_PER_BIT
+        + NEOPIXEL_TICKS_PER_BIT);
 }
 
 void
@@ -175,7 +185,7 @@ command_config_neopixel_hw(uint32_t *args)
     n->pin = args[1];
     n->data_size = data_size;
     n->reset_min_ticks = args[3];
-    n->sm = claim_sm();
+    n->sm = claim_sm(n);
     n->data[data_size] = 0;
     hw_setup(n);
 }
