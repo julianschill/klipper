@@ -124,6 +124,10 @@ config WANT_NEOPIXEL
     bool
     depends on HAVE_GPIO
     default y
+config WANT_NEOPIXEL_HW
+    bool
+    depends on WANT_NEOPIXEL && HAVE_GPIO_HARD_PWM_LED
+    default y
 config WANT_PULSE_COUNTER
     bool
     depends on HAVE_GPIO
@@ -347,6 +351,8 @@ config HAVE_GPIO_SDIO
 config HAVE_GPIO_I2C
     bool
 config HAVE_GPIO_HARD_PWM
+    bool
+config HAVE_GPIO_HARD_PWM_LED
     bool
 config HAVE_STRICT_TIMING
     bool
