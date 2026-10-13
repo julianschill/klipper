@@ -45,7 +45,13 @@
 // the fixed feed slot for that timer's update request. The table intentionally
 // uses one stream per update-event source: components on distinct timer
 // request sources may run at the same time, while a second component asking
-// for the same source is refused before it changes the shared timer.
+// for the same source is refused before it changes the shared timer. The
+// stream/channel numbers come from the "DMA request mapping" tables of the
+// reference manuals for the covered product lines; they agree across each
+// listed F4xx and F7xx model, while models whose requests connect through a
+// request multiplexer (G0x/G4x/H7x) or whose DMA controller predates this
+// stream-and-channel programming model (F0x/F1x) have no fixed feed slot to
+// name and stay out of this table.
 static const struct neopixel_hw_map {
     TIM_TypeDef *tim;
     uint32_t pin;
@@ -53,7 +59,26 @@ static const struct neopixel_hw_map {
     uint8_t task_index;       // index into led_dma_tasks
     uint32_t chsel;           // DMA_SxCR.CHSEL value selecting that event
 } led_hw_regs[] = {
-#if CONFIG_MACH_STM32F446
+#if CONFIG_MACH_STM32F4
+  #if CONFIG_MACH_STM32F401
+    // TIM3_UP pins only mapped in the F401 block of hard_pwm.c
+    {TIM3, GPIO('A',  6), 1, 2, 5},
+    {TIM3, GPIO('C',  6), 1, 2, 5},
+    {TIM3, GPIO('A',  7), 2, 2, 5},
+    {TIM3, GPIO('C',  7), 2, 2, 5},
+    {TIM3, GPIO('C',  8), 3, 2, 5},
+    {TIM3, GPIO('C',  9), 4, 2, 5},
+  #endif
+  #if CONFIG_MACH_STM32F4x5 || CONFIG_MACH_STM32F446
+    // TIM8_UP: one feed slot for any TIM8 channel, DMA2.Stream1 CH7
+    {TIM8, GPIO('C',  6), 1, 9, 7},
+    {TIM8, GPIO('C',  7), 2, 9, 7},
+    {TIM8, GPIO('C',  8), 3, 9, 7},
+    {TIM8, GPIO('C',  9), 4, 9, 7},
+  #endif
+    // The rows below map the pins hard_pwm.c defines for every klipper STM32F4
+    // target; their feed numbers match the request table shared by that whole
+    // F4xx line, as already verified on F446
     // TIM1_UP: one feed slot for any TIM1 channel, DMA2.Stream5 CH6
     {TIM1, GPIO('A',  8), 1, 13, 6},
     {TIM1, GPIO('A',  9), 2, 13, 6},
@@ -66,7 +91,10 @@ static const struct neopixel_hw_map {
     // TIM2_UP: one feed slot for any TIM2 channel, DMA1.Stream1 CH3
     {TIM2, GPIO('A',  5), 1, 1, 3},
     {TIM2, GPIO('A', 15), 1, 1, 3},
+  #if CONFIG_MACH_STM32F446
+    // TIM2 B2 is mapped by hard_pwm.c only on F446
     {TIM2, GPIO('B',  2), 4, 1, 3},
+  #endif
     {TIM2, GPIO('B',  3), 2, 1, 3},
     {TIM2, GPIO('B', 10), 3, 1, 3},
     {TIM2, GPIO('B', 11), 4, 1, 3},
@@ -82,11 +110,28 @@ static const struct neopixel_hw_map {
     {TIM4, GPIO('D', 13), 2, 6, 2},
     {TIM4, GPIO('D', 14), 3, 6, 2},
     {TIM4, GPIO('D', 15), 4, 6, 2},
-    // TIM8_UP: one feed slot for any TIM8 channel, DMA2.Stream1 CH7
-    {TIM8, GPIO('C',  6), 1, 9, 7},
-    {TIM8, GPIO('C',  7), 2, 9, 7},
-    {TIM8, GPIO('C',  8), 3, 9, 7},
-    {TIM8, GPIO('C',  9), 4, 9, 7}
+    // TIM5_UP: one feed slot for any TIM5 channel, DMA1.Stream0 CH6
+    {TIM5, GPIO('A',  0), 1, 0, 6},
+    {TIM5, GPIO('A',  1), 2, 0, 6},
+    {TIM5, GPIO('A',  2), 3, 0, 6},
+    {TIM5, GPIO('A',  3), 4, 0, 6},
+#elif CONFIG_MACH_STM32F7
+    // F7xx rows mirror the hard_pwm.c F7 pin table; these request feeds use
+    // the same stream/channel numbers as the F4xx table above (RM0410 lists
+    // TIM2_UP at DMA1.Stream1 CH3, TIM3_UP at DMA1.Stream2 CH5 and TIM5_UP
+    // at DMA1.Stream0 CH6 for the F76x/F77x line)
+    {TIM2, GPIO('A', 15), 1, 1, 3},
+    {TIM2, GPIO('B',  3), 2, 1, 3},
+    {TIM2, GPIO('B', 10), 3, 1, 3},
+    {TIM2, GPIO('B', 11), 4, 1, 3},
+    {TIM3, GPIO('B',  4), 1, 2, 5},
+    {TIM3, GPIO('B',  5), 1, 2, 5},
+    {TIM3, GPIO('C',  8), 2, 2, 5},
+    {TIM3, GPIO('C',  9), 2, 2, 5},
+    {TIM5, GPIO('A', 10), 3, 0, 6},
+    {TIM5, GPIO('E', 13), 3, 0, 6},
+    {TIM5, GPIO('A', 11), 4, 0, 6},
+    {TIM5, GPIO('E', 14), 4, 0, 6}
 #endif
 };
 
